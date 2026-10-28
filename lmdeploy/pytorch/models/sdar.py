@@ -137,7 +137,7 @@ class SDARAttention(nn.Module):
             self._compute_focus_importance(context, query_states, key_states)
             # torch.cuda.nvtx.range_pop()
         elif focus_fill_only:
-            if context.focus_view.processing_mask_evictable:
+            if context.focus_view.processing_mask_evictable or context.focus_view.refresh_evictable:
                 # For better overlap.
                 new_q_lens = torch.zeros_like(context.q_seqlens)
                 # torch.cuda.nvtx.range_push("self._prepare_focus_eviction")
@@ -232,7 +232,6 @@ class SDARAttention(nn.Module):
         query_states: torch.Tensor,
         key_states: torch.Tensor,
     ) -> torch.Tensor:
-        prev_scores = context.focus_first_layer_scores
         view = context.focus_view
         device = query_states.device
         proc_indices = context.processing_indices
@@ -243,11 +242,18 @@ class SDARAttention(nn.Module):
         targets = focus_compute_targets(mask_lengths, avg_tokens, context.focus_params.focus_alpha)
         should_evict = (targets > 0) & (mask_lengths > targets)
 
-        retain_processing_mask = torch.ones_like(proc_indices, dtype=torch.bool, device=device)
+        if view.refresh_evictable:
+            # drop already-decoded (refresh) tokens after this layer: their KV is recomputed only in layers 0-1
+            retain_processing_mask = torch.zeros_like(proc_indices, dtype=torch.bool, device=device)
+            retain_processing_mask[mask_globals] = True
+        else:
+            retain_processing_mask = torch.ones_like(proc_indices, dtype=torch.bool, device=device)
 
         total_masked = view.processing_mask_total
         should_evict_any = view.processing_mask_evictable
         if total_masked > 0 and should_evict_any:
+            # layer 0 only scores masks when they are evictable (not for refresh-only eviction)
+            prev_scores = context.focus_first_layer_scores
             max_mask_len = view.processing_mask_max_len
             mask_importance_flat = focus_importance_ragged(query_states,
                                                            key_states,
@@ -266,6 +272,11 @@ class SDARAttention(nn.Module):
                                                                view.block_progress,
                                                                max_mask_len)
             retain_processing_mask[mask_globals] = retain_mask_flat
+        if view.refresh_evictable:
+            # every sequence keeps its rightmost processed token, so no query becomes empty and the
+            # deeper layers keep the same attention span
+            end_offsets = context.q_start_loc + context.q_seqlens - 1
+            retain_processing_mask[end_offsets] = True
 
         keep_tokens_host = self._get_keep_tokens_host()
         keep_tokens_dev = retain_processing_mask.sum(dtype=torch.int32)
@@ -358,7 +369,7 @@ class SDARAttention(nn.Module):
         k_scales = None if not has_scales else past_key_value[2]
         v_scales = None if not has_scales else past_key_value[3]
 
-        if not context.focus_view.processing_mask_evictable:
+        if not (context.focus_view.processing_mask_evictable or context.focus_view.refresh_evictable):
             context.update_focus_progress_only()
             self.attn_fwd.forward_only_fill_kv(key_states, value_states, k_cache, v_cache, attn_metadata,
                                                k_scales_zeros=k_scales, v_scales_zeros=v_scales)

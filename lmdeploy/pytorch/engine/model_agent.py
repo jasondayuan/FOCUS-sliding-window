@@ -33,6 +33,7 @@ from ..utils import get_gpu_memory, monkey_patch_hf_modules_cache
 from ..weight_loader.model_weight_loader import ModelWeightLoader, load_model_weights
 from .cache_engine import CacheEngine, StateCacheEngine
 from .guided_process import GuidedDecodingManager
+from .step_profile import STEP_PROFILE
 from .logits_process import FusedLogitsProcessor, SamplingInputs
 
 logger = get_logger('lmdeploy')
@@ -227,6 +228,7 @@ def model_forward(
 ):
     """Perform model forward."""
     stream = stream or torch.cuda.current_stream()
+    prof_t0 = STEP_PROFILE.begin(inputs.is_decoding) if STEP_PROFILE is not None else None
     with torch.cuda.stream(stream), step_ctx_manager(model.ctx_mgr):
         # forward
         ctx_mgr = model.ctx_mgr
@@ -283,6 +285,10 @@ def model_forward(
             output['seq_length'] = context.q_seqlens[:len(inputs.seq_length)]
             # for draft model reuse
             output['position_ids'] = context.position_ids
+            if prof_t0 is not None:
+                tracked = context.is_decoding and context.dllm_track
+                STEP_PROFILE.end(prof_t0, context.is_decoding, len(inputs.seq_length),
+                                 sum(input_counts) if tracked else -1, sum(proc_counts) if tracked else -1)
             return output
 
 
@@ -659,8 +665,7 @@ class BaseModelAgent:
 
         hidden_states, ret = self.spec_agent.update_main_model_outputs(ret, origin_inputs)
 
-        logits = self.get_logits(hidden_states)
-        logits = self.agent_strategy.reshape_logits(logits, origin_inputs)
+        logits = self.agent_strategy.compute_logits(self.get_logits, hidden_states, origin_inputs)
         ret['logits'] = logits
         return ret
 

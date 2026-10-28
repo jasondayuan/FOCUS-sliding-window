@@ -362,6 +362,40 @@ class PytorchEngineConfig:
             feeds block positions <= rightmost_decoded + k into the model. 0 disables the window.
         dllm_window_prefix_granularity (int): When > 0, replace the delayed-cache rule with caching only the
             longest decoded prefix, rounded down to a multiple of this granularity. 0 keeps the default rule.
+        dllm_cache_delay (str): When a decoded token's KV is frozen under the delayed cache. 'neighbor' (default):
+            after it was re-fed with its real id and its right neighbor is decoded too; 'one': after exactly one
+            re-feed; 'zero': immediately, keeping the KV computed while it was still a mask (no refresh pass);
+            'conf': immediately if it was decoded with confidence >= dllm_freeze_conf, else after one re-feed.
+        dllm_freeze_conf (float): Confidence above which cache_delay='conf' skips the refresh pass.
+        dllm_refresh_evict (bool): With FOCUS, also evict already-decoded (refresh) tokens at the eviction layer,
+            so their KV is only recomputed in the first two layers and deeper layers keep the mask-stage KV.
+        dllm_refresh_evict_repeat (bool): With dllm_refresh_evict, a decoded token's first re-feed still goes
+            through all layers; only its later re-feeds (forced by the 'neighbor' rule) stop after layer 1.
+            Meant for dllm_focus_alpha large enough that FOCUS evicts no masks.
+        dllm_window_conf (float): When > 0, the window's right edge is placed from earlier steps' confidences
+            (SlowFast-style): it reaches dllm_window_k past the farthest still-masked position whose last computed
+            confidence is at least this value, but no less than rightmost_decoded + dllm_window_k and no more
+            than rightmost_decoded + dllm_window_k_max.
+        dllm_window_k_max (int): Cap of the confidence-placed window (0 means 2 * dllm_window_k).
+        dllm_window_topn (int): When > 0, only feed the top-n masked positions inside the window, ranked
+            d2Cache-style by last computed confidence x density of decoded tokens around the position.
+        dllm_window_sigma (float): Width of the Gaussian decoded-token density used by dllm_window_topn.
+        dllm_window_adapt (bool): Adapt the window size per sequence from the previous step's decodes: double it
+            (up to dllm_window_k_max) when the farthest decoded token sat at the window edge, halve it (down to
+            dllm_window_k) when all decodes stayed in the near half.
+        dllm_focus_min_keep (int): FOCUS keeps at least this many masks per sequence, i.e. its retain target is
+            max(ceil(alpha x avg decoded), min_keep). 0 = FOCUS's own rule.
+        dllm_focus_carry_avg (bool): start each block's FOCUS budget from the previous block's average decoded
+            tokens per step instead of 1.
+        dllm_focus_evict_gate (float): run FOCUS's eviction in a step only if the masks it would evict (fed masks
+            minus retain targets, summed over the batch) are at least this many per sequence. 0 = FOCUS's rule
+            (evict whenever any sequence is over its target).
+        dllm_fast_unmask (bool): compute the unmasking confidence with a fused kernel over masked rows only,
+            instead of a softmax over every row of the block.
+        dllm_masked_logits (bool): run the LM head only on processed masked tokens, not on re-fed decoded ones.
+        dllm_fast_host (bool): batch the per-sequence host bookkeeping of the delayed cache / FOCUS / window.
+        dllm_eos_early_stop (bool): finish a sequence once a stop word and everything before it are decoded,
+            instead of waiting for the rest of its block (which is discarded).
     """
     dtype: str = 'auto'
     tp: int = 1
@@ -414,6 +448,22 @@ class PytorchEngineConfig:
     dllm_track: bool = False
     dllm_window_k: int = 0
     dllm_window_prefix_granularity: int = 0
+    dllm_cache_delay: str = 'neighbor'
+    dllm_refresh_evict: bool = False
+    dllm_refresh_evict_repeat: bool = False
+    dllm_window_conf: float = 0.0
+    dllm_window_k_max: int = 0
+    dllm_window_topn: int = 0
+    dllm_window_sigma: float = 2.0
+    dllm_window_adapt: bool = False
+    dllm_freeze_conf: float = 0.99
+    dllm_focus_min_keep: int = 0
+    dllm_focus_carry_avg: bool = False
+    dllm_focus_evict_gate: float = 0.0
+    dllm_fast_unmask: bool = False
+    dllm_masked_logits: bool = False
+    dllm_fast_host: bool = False
+    dllm_eos_early_stop: bool = False
 
     role: EngineRole = EngineRole.Hybrid
     migration_backend: MigrationBackend = MigrationBackend.DLSlime
@@ -439,6 +489,11 @@ class PytorchEngineConfig:
             assert self.dllm_focus_alpha >= 1, '--dllm-enable-focus requires dllm-focus-alpha >= 1.0.'
         if self.dllm_window_k > 0 or self.dllm_window_prefix_granularity > 0:
             assert self.dllm_enable_delayed_cache, '--dllm-window-* requires --dllm-enable-delayed-cache.'
+        assert self.dllm_cache_delay in ('neighbor', 'one', 'zero', 'conf'), f'unknown dllm_cache_delay {self.dllm_cache_delay}'
+        if self.dllm_refresh_evict:
+            assert self.dllm_enable_focus, '--dllm-refresh-evict requires --dllm-enable-focus.'
+        if self.dllm_window_conf > 0 or self.dllm_window_topn > 0:
+            assert self.dllm_window_k > 0, '--dllm-window-conf/topn require --dllm-window-k.'
         if self.quant_policy > 0 and self.device_type not in ['cuda', 'ascend']:
             assert False, \
                    'kv cache quantization only works for CUDA and ASCEND.'

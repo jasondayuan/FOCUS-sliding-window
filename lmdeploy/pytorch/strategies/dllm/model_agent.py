@@ -76,6 +76,34 @@ def _check_stopwords_dllm(token_ids: torch.Tensor, stop_words: torch.Tensor, is_
 class DLLMStoppingCriteria(StoppingCriteria):
     num_appendable_ids: torch.Tensor
     output_start_pos: torch.Tensor
+    # stop as soon as a stop word and everything before it are decoded, instead of when the whole block is
+    eos_early_stop: bool = False
+
+    def _finish_after_stop_word(self, token_ids: torch.Tensor, stop_words: torch.Tensor, dllm_mask: torch.Tensor,
+                                inputs: ModelInputs):
+        """Mark the masked tail after a decoded stop word as decoded (with the stop word), in place.
+
+        Everything after the first stop word is cut by stop_pos anyway, so decoding it only costs steps. Returns
+        the rows whose block became complete this way.
+        """
+        batch_size, block_size = dllm_mask.shape
+        tokens = token_ids.view(batch_size, block_size)
+        # stop words left over from the prompt part of the first block do not count (as in _check_stopwords_dllm)
+        kv_seqlens = inputs.history_lengths + inputs.seq_length
+        ignore_pos = (self.output_start_pos - (kv_seqlens - block_size)).clamp_min(0)
+        pos = torch.arange(block_size, device=dllm_mask.device)
+        decoded = dllm_mask == consts.DLLM_UNMASKED
+        is_stop = (tokens.flatten()[:, None] == stop_words).any(1).view(batch_size, block_size)
+        is_stop &= decoded & (pos[None, :] >= ignore_pos.to(pos.device)[:, None])
+        first_stop = torch.where(is_stop.any(1), is_stop.int().argmax(1), block_size)
+        masked = dllm_mask == consts.DLLM_MASKED
+        first_masked = torch.where(masked.any(1), masked.int().argmax(1), block_size)
+        early = (first_stop < block_size) & (first_masked > first_stop) & masked.any(1)
+        fill = early[:, None] & masked
+        stop_tok = tokens.gather(1, first_stop.clamp_max(block_size - 1)[:, None]).expand_as(tokens)
+        tokens.copy_(torch.where(fill, stop_tok, tokens))
+        dllm_mask.masked_fill_(fill, consts.DLLM_UNMASKED)
+        return early
 
     @record_function('stopping_criteria')
     def step(self,
@@ -92,6 +120,8 @@ class DLLMStoppingCriteria(StoppingCriteria):
 
         dllm_mask = extra_inputs.dllm_mask
         dllm_mask = dllm_mask.view(batch_size, block_size)
+        if self.eos_early_stop and stop_words is not None:
+            self._finish_after_stop_word(token_ids, stop_words, dllm_mask, inputs)
         is_unmasked = (dllm_mask == consts.DLLM_UNMASKED).all(dim=1)
 
         # check stop by num_new_tokens
@@ -110,7 +140,8 @@ class DLLMStoppingCriteria(StoppingCriteria):
                                                                           output_start_pos=output_start_pos,
                                                                           inputs=inputs)
 
-        new_stopping = DLLMStoppingCriteria(num_appendable_ids=num_appendable_ids, output_start_pos=output_start_pos)
+        new_stopping = DLLMStoppingCriteria(num_appendable_ids=num_appendable_ids, output_start_pos=output_start_pos,
+                                            eos_early_stop=self.eos_early_stop)
         return stopped, stop_pos, new_stopping
 
 
@@ -122,6 +153,8 @@ class DLLMModelAgentStrategy(ModelAgentStrategy):
         self.dllm_mask_token = dllm_mask_token
 
         self.unmasking_processor = UnmaskingProcessor(dllm_config=dllm_config)
+        self._return_conf = (dllm_config.window_conf > 0 or dllm_config.window_topn > 0
+                             or dllm_config.cache_delay == 'conf')
         self._logits_buffer: torch.Tensor | None = None
         self._logits_buffer_capacity: int = 0
         self._logits_vocab_size: int = 0
@@ -147,19 +180,42 @@ class DLLMModelAgentStrategy(ModelAgentStrategy):
             self._logits_vocab_size = vocab_size
         return self._logits_buffer[:batch_size]
 
+    def _dense_rows(self, inputs: ModelInputs, device: torch.device) -> torch.Tensor:
+        """Row in the [batch x block] grid of every processed token, in processing order."""
+        batch_size = inputs.seq_length.size(0)
+        proc_indices = inputs.processing_indices.to(device=device, dtype=torch.long)
+        seq_lengths_src = inputs.processing_q_lens if inputs.processing_q_lens is not None else inputs.seq_length
+        seq_lengths = seq_lengths_src.to(device=device, dtype=torch.long)
+        seq_ids = torch.arange(batch_size, device=device, dtype=torch.long)
+        batch_indices = torch.repeat_interleave(seq_ids, seq_lengths, output_size=int(proc_indices.numel()))
+        return batch_indices * self.block_size + proc_indices
+
+    def compute_logits(self, get_logits, hidden_states: torch.Tensor, inputs: ModelInputs) -> torch.Tensor:
+        cfg = self.unmasking_processor.dllm_config
+        if not (cfg.masked_logits and self._use_delayed_cache(inputs)):
+            return super().compute_logits(get_logits, hidden_states, inputs)
+        flat_hidden = hidden_states.reshape(-1, hidden_states.size(-1))
+        if flat_hidden.size(0) != inputs.processing_indices.numel():
+            return super().compute_logits(get_logits, hidden_states, inputs)
+        # only masked rows are ever read (unmasking replaces every other row by its input id), so skip the LM head
+        # for re-fed decoded tokens; the other rows of the reused buffer keep stale values that nothing reads
+        dense_rows = self._dense_rows(inputs, flat_hidden.device)
+        input_ids = inputs.input_ids.flatten().to(flat_hidden.device)
+        sel = (input_ids.index_select(0, dense_rows) == self.dllm_mask_token).nonzero().flatten()
+        logits = get_logits(flat_hidden.index_select(0, sel)[None])
+        vocab_size = logits.size(-1)
+        full_logits = self._get_full_logits_buffer(logits, inputs.seq_length.size(0), vocab_size)
+        flat_full = full_logits.view(-1, vocab_size)
+        flat_full.index_copy_(0, dense_rows.index_select(0, sel), logits.reshape(-1, vocab_size))
+        return flat_full.unsqueeze(0)
+
     def _scatter_logits(self, flat_logits: torch.Tensor, inputs: ModelInputs) -> torch.Tensor:
         batch_size = inputs.seq_length.size(0)
         vocab_size = flat_logits.size(-1)
         block_size = self.block_size
         full_logits = self._get_full_logits_buffer(flat_logits, batch_size, vocab_size)
-        device = flat_logits.device
-        proc_indices = inputs.processing_indices.to(device=device, dtype=torch.long)
-        seq_lengths_src = inputs.processing_q_lens if inputs.processing_q_lens is not None else inputs.seq_length
-        num_proc = proc_indices.numel()
-        seq_lengths = seq_lengths_src.to(device=device, dtype=torch.long)
-        seq_ids = torch.arange(batch_size, device=device, dtype=torch.long)
-        batch_indices = torch.repeat_interleave(seq_ids, seq_lengths, output_size=int(num_proc))
-        dense_row_indices = batch_indices * block_size + proc_indices
+        num_proc = inputs.processing_indices.numel()
+        dense_row_indices = self._dense_rows(inputs, flat_logits.device)
         total_logits = flat_logits.size(0)
         # Kernels may output ragged logits (one row per processing index) or dense block
         # logits. Select the corresponding rows before scattering into the full buffer.
@@ -298,7 +354,8 @@ class DLLMModelAgentStrategy(ModelAgentStrategy):
         pos = [seq.output_start_pos for seq in seqs]
         output_start_pos = torch.tensor(pos)
 
-        return DLLMStoppingCriteria(num_appendable_ids=num_appendable, output_start_pos=output_start_pos)
+        return DLLMStoppingCriteria(num_appendable_ids=num_appendable, output_start_pos=output_start_pos,
+                                    eos_early_stop=self.unmasking_processor.dllm_config.eos_early_stop)
 
     def make_extra_inputs(self, seqs: 'SeqList') -> ExtraInputs:
         """Create extra inputs."""
@@ -311,7 +368,8 @@ class DLLMModelAgentStrategy(ModelAgentStrategy):
         dllm_mask = extra_inputs.dllm_mask
         conf = extra_inputs.dllm_conf
         if conf is not None:
-            conf = conf.to(torch.float16)
+            # only the confidence-placed window reads it on the host
+            conf = conf.to(torch.float16) if self._return_conf else None
         return DLLMExtraOutputs(dllm_mask=dllm_mask, dllm_conf=conf)
 
     def update_inputs_for_next_step(self, model_inputs: 'ModelInputs', sampling_inputs: 'SamplingInputs',

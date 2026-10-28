@@ -142,6 +142,8 @@ class FocusRuntimeView:
     processing_mask_total: int = 0
     processing_mask_max_len: int = 0
     processing_mask_evictable: bool = False
+    # some processed tokens are already decoded and should be dropped after the eviction layer
+    refresh_evictable: bool = False
     block_progress_host: torch.LongTensor = None
     block_progress_event: Optional[torch.cuda.Event] = None
     new_q_lens_host_buffer: Optional[torch.Tensor] = None
@@ -542,7 +544,13 @@ class StepContext:
             processing_mask_max_len = mask_lengths_cpu.max().item()
             retain_cpu = torch.ceil(avg_tokens_cpu * focus_params.focus_alpha).to(dtype=mask_lengths_cpu.dtype)
             targets_cpu = torch.minimum(mask_lengths_cpu, retain_cpu)
-            should_evict = ((targets_cpu > 0) & (mask_lengths_cpu > targets_cpu)).any().item()
+            excess = (mask_lengths_cpu - targets_cpu).clamp_(min=0)
+            evict_gate = dllm_cfg.focus_evict_gate
+            if evict_gate > 0:
+                # skip the eviction pass (importance, selection, host syncs, compaction) when it would cut little
+                should_evict = excess.sum().item() >= evict_gate * excess.numel()
+            else:
+                should_evict = bool((excess > 0).any().item())
             block_progress_host = inputs.focus_block_progress
             block_progress = block_progress_host.to(device=device, non_blocking=True)
             focus_view = FocusRuntimeView(
@@ -554,6 +562,7 @@ class StepContext:
                 processing_mask_total=processing_mask_total,
                 processing_mask_max_len=processing_mask_max_len,
                 processing_mask_evictable=should_evict,
+                refresh_evictable=bool(dllm_cfg.refresh_evict and processing_indices.numel() > processing_mask_total),
                 block_progress_host=block_progress_host,
                 new_q_lens_host_buffer=q_lens_host_buffer,
             )

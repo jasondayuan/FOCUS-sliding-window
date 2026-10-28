@@ -52,9 +52,14 @@ class UnmaskingProcessor:
         """dynamic."""
         block_size = self.dllm_config.block_length
         threshold = self.dllm_config.confidence_threshold
-        scores = self._get_scores(logits, token_ids)
         is_masked = dllm_mask == DLLM_MASKED
-        scores = torch.where(is_masked, scores, scores.new_zeros((1, )))
+        if self.dllm_config.fast_unmask:
+            # fused, masked rows only: same value as softmax(...).gather(...), no [rows, vocab] softmax
+            from lmdeploy.pytorch.kernels.cuda.dllm_conf import token_prob
+            scores = token_prob(logits.flatten(0, -2), token_ids.flatten(), is_masked)
+        else:
+            scores = self._get_scores(logits, token_ids)
+            scores = torch.where(is_masked, scores, scores.new_zeros((1, )))
 
         scores = scores.view(-1, block_size)
         conf = scores

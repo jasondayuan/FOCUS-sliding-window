@@ -47,9 +47,15 @@ class DelayedCacheState:
     _full_indices: torch.Tensor = None
     # > 0: only cache the longest decoded prefix, rounded down to this granularity.
     prefix_granularity: int = 0
+    # 'neighbor': freeze a decoded token once it has been re-fed and its right neighbor is decoded;
+    # 'one': freeze after a single re-feed; 'zero': freeze immediately (keep the mask-stage KV);
+    # 'conf': like 'one', but tokens decoded with high confidence are frozen immediately (see freeze_new).
+    delay: str = 'neighbor'
+    # numpy instead of small torch ops on the per-step path (same results; see --fast-host)
+    fast_host: bool = False
 
     @classmethod
-    def new(cls, block_length: int, prefix_granularity: int = 0):
+    def new(cls, block_length: int, prefix_granularity: int = 0, delay: str = 'neighbor', fast_host: bool = False):
         # Keep this on regular host memory:
         # - Engine copies indices into its own pinned pool buffers anyway.
         # - Pinning per-sequence buffers adds overhead and can fragment pinned memory.
@@ -58,7 +64,9 @@ class DelayedCacheState:
         return cls(block_length=block_length,
                    uncached_positions=uncached,
                    _full_indices=full_indices,
-                   prefix_granularity=prefix_granularity)
+                   prefix_granularity=prefix_granularity,
+                   delay=delay,
+                   fast_host=fast_host)
 
     def reset(self):
         self.uncached_positions.fill_(True)
@@ -76,11 +84,27 @@ class DelayedCacheState:
             ready[:prefix_len] = True
             self.mark_cached(ready)
             return
+        if self.fast_host and self.delay == 'neighbor':
+            # uncached_positions.numpy() shares memory with the tensor
+            non_mask = dllm_mask != DLLM_MASKED
+            ready = non_mask.copy()
+            ready[:-1] &= non_mask[1:]
+            uncached = self.uncached_positions.numpy()
+            uncached &= ~ready
+            return
         non_mask = torch.from_numpy(dllm_mask != DLLM_MASKED)
+        if self.delay != 'neighbor':
+            self.mark_cached(non_mask)
+            return
         right_neighbor = torch.roll(non_mask, shifts=-1, dims=0)
         right_neighbor[-1] = True
         ready = non_mask & right_neighbor
         self.mark_cached(ready)
+
+    def freeze_new(self, prev_mask: np.ndarray, curr_mask: np.ndarray, conf: np.ndarray, min_conf: float):
+        """Freeze tokens decoded this step with confidence >= min_conf, skipping their refresh pass."""
+        newly = (prev_mask == DLLM_MASKED) & (curr_mask != DLLM_MASKED) & (conf >= min_conf)
+        self.mark_cached(torch.from_numpy(newly))
 
     def get_processing_indices(self) -> torch.Tensor:
         # Always return a CPU tensor (engine will pack into its pinned pool).
@@ -88,8 +112,14 @@ class DelayedCacheState:
             self.needs_warmup = False
             return self._full_indices
 
-        indices = self.uncached_positions.nonzero(as_tuple=False).squeeze(-1)
+        if self.fast_host:
+            indices = torch.from_numpy(np.flatnonzero(self.uncached_positions.numpy()))
+        else:
+            indices = self.uncached_positions.nonzero(as_tuple=False).squeeze(-1)
         if indices.numel() == 0:
+            if self.delay in ('zero', 'conf'):
+                # block fully decoded and frozen: one token is enough for the step that retires the block
+                return self._full_indices[-1:]
             return self._full_indices
         return indices
 
@@ -130,14 +160,38 @@ class SchedulerSequenceDLLM(SchedulerSequenceDefault):
         self._delayed_cache_state: DelayedCacheState | None = None
         cfg = self.dllm_config
         self._window_k = int(getattr(cfg, 'window_k', 0) or 0) if cfg else 0
+        self._window_conf = float(getattr(cfg, 'window_conf', 0.0) or 0.0) if cfg else 0.0
+        self._window_k_max = int(getattr(cfg, 'window_k_max', 0) or 0) if cfg else 0
+        if self._window_k_max <= 0:
+            self._window_k_max = 2 * self._window_k
+        self._window_topn = int(getattr(cfg, 'window_topn', 0) or 0) if cfg else 0
+        self._window_sigma = float(getattr(cfg, 'window_sigma', 2.0) or 2.0) if cfg else 2.0
+        self._window_adapt = bool(getattr(cfg, 'window_adapt', False)) if cfg else False
+        # current window size under window_adapt (kept across blocks: the text's regime persists)
+        self._cur_k = self._window_k
+        # last computed confidence of every block position (the block's first step computes all of them)
+        self._last_conf: Optional[np.ndarray] = None
+        self._refresh_evict_repeat = bool(getattr(cfg, 'refresh_evict', False)
+                                          and getattr(cfg, 'refresh_evict_repeat', False)) if cfg else False
+        # how often each decoded position of the block has been re-fed with its real id
+        self._refeeds = np.zeros((self.dllm_block_length, ), dtype=np.int16)
         if self._strategy.enable_delayed_cache:
             prefix_granularity = int(getattr(cfg, 'window_prefix_granularity', 0) or 0) if cfg else 0
-            self._delayed_cache_state = DelayedCacheState.new(self.dllm_block_length, prefix_granularity)
+            delay = getattr(cfg, 'cache_delay', 'neighbor') if cfg else 'neighbor'
+            fast_host = bool(getattr(cfg, 'fast_host', False)) if cfg else False
+            self._delayed_cache_state = DelayedCacheState.new(self.dllm_block_length, prefix_granularity, delay,
+                                                              fast_host)
         focus_enabled = bool(cfg and getattr(cfg, 'enable_focus', False))
         self._focus_enabled = focus_enabled and self.delayed_cache_enabled
         self._focus_state: FocusState | None = FocusState.new(self.dllm_block_length) if self._focus_enabled else None
         self._focus_token_sum: float = 0.0
         self._focus_steps: int = 0
+        # FOCUS retain target = max(ceil(alpha x avg), min_keep): raise avg to min_keep / alpha
+        alpha = float(getattr(cfg, 'focus_alpha', 1.0) or 1.0) if cfg else 1.0
+        self._focus_min_avg = int(getattr(cfg, 'focus_min_keep', 0) or 0) / alpha if cfg else 0.0
+        self._focus_carry_avg = bool(getattr(cfg, 'focus_carry_avg', False)) if cfg else False
+        self._focus_block_start_avg = 1.0
+        self._fast_host = bool(getattr(cfg, 'fast_host', False)) if cfg else False
         self._dllm_processed_tokens: int = 0
         self._dllm_input_tokens: int = 0
         self._dllm_decode_steps: int = 0
@@ -180,10 +234,14 @@ class SchedulerSequenceDLLM(SchedulerSequenceDefault):
         return self._delayed_cache_state is not None
 
     def _reset_delayed_cache_state(self):
+        self._last_conf = None
+        self._refeeds.fill(0)
         if self._delayed_cache_state is not None:
             self._delayed_cache_state.reset()
         if self._focus_state is not None:
             self._focus_state.reset()
+        if self._focus_carry_avg and self._focus_steps > 0:
+            self._focus_block_start_avg = self._focus_token_sum / self._focus_steps
         self._focus_token_sum = 0.0
         self._focus_steps = 0
 
@@ -196,16 +254,57 @@ class SchedulerSequenceDLLM(SchedulerSequenceDefault):
         last = self.dllm_block_length - 1
         if self._window_k <= 0:
             return last
-        decoded = np.flatnonzero(self.dllm_mask != DLLM_MASKED)
+        mask = self.dllm_mask
+        decoded = np.flatnonzero(mask != DLLM_MASKED)
         rightmost = int(decoded[-1]) if decoded.size else -1
-        return min(rightmost + self._window_k, last)
+        end = rightmost + (self._cur_k if self._window_adapt else self._window_k)
+        if self._window_conf > 0 and self._last_conf is not None:
+            # SlowFast-style edge: look window_k past the farthest masked position earlier steps were already
+            # fairly sure about. Positions beyond the window were never computed, so the edge has to be pushed
+            # out from inside it.
+            likely = np.flatnonzero((mask == DLLM_MASKED) & (self._last_conf >= self._window_conf))
+            likely = likely[likely > rightmost]
+            if likely.size:
+                end = max(end, int(likely[-1]) + self._window_k)
+            end = min(end, rightmost + self._window_k_max)
+        return min(end, last)
+
+    def update_conf(self, conf: np.ndarray):
+        """Remember the confidences computed this step (0 marks positions that were not processed)."""
+        if self._last_conf is None:
+            self._last_conf = conf.copy()
+        else:
+            np.copyto(self._last_conf, conf, where=conf > 0)
+
+    def _select_topn(self, indices: torch.Tensor) -> torch.Tensor:
+        """d2Cache-style certainty prior: keep re-fed tokens and the top-n masks by conf x decoded density."""
+        mask = self.dllm_mask
+        idx = indices.numpy()
+        is_mask = mask[idx] == DLLM_MASKED
+        if int(is_mask.sum()) <= self._window_topn:
+            return indices
+        block = self.dllm_block_length
+        # decoded positions of this block plus the (fully decoded) previous block
+        decoded = np.concatenate([np.arange(-block, 0), np.flatnonzero(mask != DLLM_MASKED)])
+        cand = idx[is_mask]
+        dist = cand[:, None] - decoded[None, :]
+        density = np.exp(-dist * dist / (2 * self._window_sigma**2)).sum(axis=1)
+        score = self._last_conf[cand] * density
+        keep_masks = cand[np.argsort(-score, kind='stable')[:self._window_topn]]
+        keep = np.sort(np.concatenate([idx[~is_mask], keep_masks]))
+        return torch.from_numpy(keep)
 
     def get_processing_indices(self) -> torch.Tensor:
         indices = self._delayed_cache_state.get_processing_indices()
         window_end = self._window_end()
         if window_end < self.dllm_block_length - 1:
             # Dropping a suffix keeps the slice sorted; position rightmost + 1 is always masked so it is non-empty.
-            indices = indices[indices <= window_end]
+            if self._fast_host:
+                indices = indices[:int(np.searchsorted(indices.numpy(), window_end, side='right'))]
+            else:
+                indices = indices[indices <= window_end]
+        if self._window_topn > 0 and self._last_conf is not None:
+            indices = self._select_topn(indices)
         self._last_processing_indices = indices
         # NOTE: sparse kernels assume each per-sequence slice is sorted
         # ascending, so keep the natural torch.nonzero ordering.
@@ -213,20 +312,18 @@ class SchedulerSequenceDLLM(SchedulerSequenceDefault):
 
     def get_focus_info(self) -> FocusInfo:
         mask_np = self.dllm_mask
-        masked_positions = np.flatnonzero(mask_np == DLLM_MASKED)
-        masked_positions = masked_positions[masked_positions <= self._window_end()]
-        if masked_positions.size == 0:
-            mask_local_indices = torch.empty((0, ), dtype=torch.long)
-        else:
-            delayed_state = self._delayed_cache_state
-            uncached_np = delayed_state.uncached_positions.numpy()
-            rank = np.cumsum(uncached_np, dtype=np.int64) - 1
-            local = rank[masked_positions]
-            mask_local_indices = torch.from_numpy(local)
+        # masked entries of this step's processing slice (get_processing_indices runs first)
+        proc = self._last_processing_indices.numpy()
+        keep = mask_np[proc] == DLLM_MASKED
+        if self._refresh_evict_repeat:
+            # a first re-feed is listed like a mask, so refresh eviction keeps it through all layers
+            keep |= self._refeeds[proc] == 0
+        mask_local_indices = torch.from_numpy(np.flatnonzero(keep))
         rightmost = self._focus_state.get_rightmost() if self._focus_state is not None else -1
-        avg_tokens = 1.0
+        avg_tokens = self._focus_block_start_avg
         if self._focus_steps > 0:
             avg_tokens = self._focus_token_sum / self._focus_steps
+        avg_tokens = max(avg_tokens, self._focus_min_avg)
         return FocusInfo(mask_local_indices=mask_local_indices,
                          rightmost_processed=rightmost,
                          avg_decoded_tokens=avg_tokens)
@@ -244,6 +341,19 @@ class SchedulerSequenceDLLM(SchedulerSequenceDefault):
         self._dllm_decode_steps += 1
         self._dllm_processed_tokens += processed_tokens
         self._dllm_input_tokens += processed_tokens if input_tokens is None else input_tokens
+
+    def adapt_window(self, prev_mask: np.ndarray, curr_mask: np.ndarray):
+        """Grow the window when the last step decoded at its edge, shrink it when decodes stayed close."""
+        newly = np.flatnonzero((prev_mask == DLLM_MASKED) & (curr_mask != DLLM_MASKED))
+        if newly.size == 0:
+            return
+        decoded = np.flatnonzero(prev_mask != DLLM_MASKED)
+        rightmost = int(decoded[-1]) if decoded.size else -1
+        far = int(newly[-1]) - rightmost
+        if far >= self._cur_k:
+            self._cur_k = min(2 * self._cur_k, self._window_k_max)
+        elif 2 * far <= self._cur_k:
+            self._cur_k = max(self._cur_k // 2, self._window_k)
 
     def record_decode_offsets(self, prev_mask: np.ndarray, curr_mask: np.ndarray):
         if self._last_processing_indices is not None:
@@ -435,12 +545,18 @@ class DLLMSequenceStrategy(SequenceStrategy):
         if model_metas is None:
             model_metas = [None] * len(running)
         dllm_mask = batched_outputs.extra_outputs.dllm_mask
+        dllm_conf = getattr(batched_outputs.extra_outputs, 'dllm_conf', None)
         stop_pos = batched_outputs.stop_pos
 
         batch_size = len(running)
         next_token_ids = next_token_ids.view(batch_size, -1).numpy()
         dllm_mask = dllm_mask.view(batch_size, -1).numpy()
+        if dllm_conf is not None:
+            dllm_conf = dllm_conf.view(batch_size, -1).float().numpy()
         stop_pos = stop_pos.tolist()
+        cache_delay = getattr(self.dllm_config, 'cache_delay', 'neighbor') if self.dllm_config is not None else 'neighbor'
+        zero_delay = cache_delay == 'zero'
+        conf_delay = cache_delay == 'conf'
         is_decoding = model_inputs.is_decoding
         update_mode = UpdateTokenMode.DECODE if is_decoding else UpdateTokenMode.PREFILL
         for idx, token in enumerate(next_token_ids):
@@ -452,7 +568,7 @@ class DLLMSequenceStrategy(SequenceStrategy):
                 continue
 
             prev_focus_mask = None
-            if is_decoding and (msg._focus_enabled or self.track):
+            if is_decoding and (msg._focus_enabled or self.track or conf_delay or msg._window_adapt):
                 prev_focus_mask = msg.dllm_mask.copy()
 
             if is_decoding:
@@ -467,8 +583,26 @@ class DLLMSequenceStrategy(SequenceStrategy):
                 if msg._focus_enabled and model_meta is not None:
                     processed_rightmost = model_meta.get('focus_processed_rightmost')
                     msg.mark_focus_processed(processed_rightmost)
+            if is_decoding and msg._refresh_evict_repeat and msg._last_processing_indices is not None:
+                proc = msg._last_processing_indices.numpy()
+                msg._refeeds[proc[prev_focus_mask[proc] != DLLM_MASKED]] += 1
+            if is_decoding and dllm_conf is not None:
+                # cleared again by update_token_ids if this step retired the block
+                msg.update_conf(dllm_conf[idx])
             # fill token
+            if is_decoding and msg._window_adapt:
+                # before update_token_ids, which may swap in the next block
+                msg.adapt_window(prev_focus_mask, mask)
             msg.update_token_ids(token, dllm_mask=mask, model_meta=model_meta, mode=update_mode)
+            if is_decoding and zero_delay and msg.delayed_cache_enabled:
+                # freeze tokens decoded this very step (their KV is the one computed from the mask input)
+                msg._update_delayed_cache_state()
+            if (is_decoding and conf_delay and msg.delayed_cache_enabled and dllm_conf is not None
+                    and msg._last_conf is not None):
+                # same block (update_token_ids clears _last_conf when it retires one): skip the refresh pass of
+                # tokens the model was already near-certain about
+                msg._delayed_cache_state.freeze_new(prev_focus_mask, msg.dllm_mask, dllm_conf[idx],
+                                                    self.dllm_config.freeze_conf)
             if is_decoding and self.track and prev_focus_mask is not None:
                 msg.record_decode_offsets(prev_focus_mask, msg.dllm_mask)
             if is_decoding and msg._focus_enabled:

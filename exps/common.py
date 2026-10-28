@@ -28,6 +28,32 @@ def add_engine_args(ap):
     ap.add_argument('--alpha', type=float, default=1.5)
     ap.add_argument('--window-k', type=int, default=0)
     ap.add_argument('--prefix-granularity', type=int, default=0)
+    ap.add_argument('--cache-delay', default='neighbor', choices=['neighbor', 'one', 'zero', 'conf'],
+                    help='when a decoded token stops being re-fed (see dllm_cache_delay)')
+    ap.add_argument('--refresh-evict', action='store_true',
+                    help='with --focus: re-fed decoded tokens only go through layers 0-1')
+    ap.add_argument('--refresh-evict-repeat', action='store_true',
+                    help='with --refresh-evict: only the 2nd+ re-feed of a token is cut to layers 0-1')
+    ap.add_argument('--window-conf', type=float, default=0.0,
+                    help='> 0: place the window from the previous step confidences (see dllm_window_conf)')
+    ap.add_argument('--window-k-max', type=int, default=0)
+    ap.add_argument('--window-topn', type=int, default=0,
+                    help='> 0: feed only the top-n masks of the window by confidence x decoded density')
+    ap.add_argument('--window-sigma', type=float, default=2.0)
+    ap.add_argument('--window-adapt', action='store_true',
+                    help='double / halve the window between window-k and window-k-max from the last step')
+    ap.add_argument('--freeze-conf', type=float, default=0.99, help="with --cache-delay conf")
+    ap.add_argument('--focus-min-keep', type=int, default=0, help='FOCUS keeps at least this many masks per sequence')
+    ap.add_argument('--focus-carry-avg', action='store_true',
+                    help="start each block's FOCUS budget from the previous block's average, not 1")
+    ap.add_argument('--fast-unmask', action='store_true',
+                    help='fused unmasking confidence over masked rows only (no full softmax)')
+    ap.add_argument('--masked-logits', action='store_true', help='LM head on processed masked tokens only')
+    ap.add_argument('--fast-host', action='store_true', help='batched host bookkeeping for delayed cache / FOCUS')
+    ap.add_argument('--eos-early-stop', action='store_true',
+                    help='stop once a stop word and its prefix are decoded, not when the whole block is')
+    ap.add_argument('--focus-evict-gate', type=float, default=0.0,
+                    help='evict only in steps where FOCUS would evict at least this many masks per sequence')
     ap.add_argument('--eager', action='store_true')
     ap.add_argument('--legacy-sampling', action='store_true',
                     help='top-k 50 / temperature 0.8 sampling, as in the runs before greedy decoding was fixed')
@@ -51,6 +77,22 @@ def build_engine(args):
         dllm_track=True,
         dllm_window_k=args.window_k,
         dllm_window_prefix_granularity=args.prefix_granularity,
+        dllm_cache_delay=args.cache_delay,
+        dllm_refresh_evict=args.refresh_evict,
+        dllm_refresh_evict_repeat=args.refresh_evict_repeat,
+        dllm_window_conf=args.window_conf,
+        dllm_window_k_max=args.window_k_max,
+        dllm_window_topn=args.window_topn,
+        dllm_window_sigma=args.window_sigma,
+        dllm_window_adapt=args.window_adapt,
+        dllm_freeze_conf=args.freeze_conf,
+        dllm_focus_min_keep=args.focus_min_keep,
+        dllm_focus_carry_avg=args.focus_carry_avg,
+        dllm_focus_evict_gate=args.focus_evict_gate,
+        dllm_fast_unmask=args.fast_unmask,
+        dllm_masked_logits=args.masked_logits,
+        dllm_fast_host=args.fast_host,
+        dllm_eos_early_stop=args.eos_early_stop,
         max_prefill_token_num=args.concurrency * BLOCK,
     )
     return Engine.from_pretrained(args.model, engine_config=engine_config)

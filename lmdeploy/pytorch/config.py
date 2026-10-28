@@ -440,6 +440,22 @@ class DLLMConfig:
     track: bool = False
     window_k: int = 0
     window_prefix_granularity: int = 0
+    cache_delay: str = 'neighbor'
+    refresh_evict: bool = False
+    refresh_evict_repeat: bool = False
+    window_conf: float = 0.0
+    window_k_max: int = 0
+    window_topn: int = 0
+    window_sigma: float = 2.0
+    window_adapt: bool = False
+    freeze_conf: float = 0.99
+    focus_min_keep: int = 0
+    focus_carry_avg: bool = False
+    focus_evict_gate: float = 0.0
+    fast_unmask: bool = False
+    masked_logits: bool = False
+    fast_host: bool = False
+    eos_early_stop: bool = False
 
 
 @dataclass
@@ -467,7 +483,23 @@ class MiscConfig:
                                  focus_alpha=engine_config.dllm_focus_alpha,
                                  track=engine_config.dllm_track,
                                  window_k=engine_config.dllm_window_k,
-                                 window_prefix_granularity=engine_config.dllm_window_prefix_granularity)
+                                 window_prefix_granularity=engine_config.dllm_window_prefix_granularity,
+                                 cache_delay=engine_config.dllm_cache_delay,
+                                 refresh_evict=engine_config.dllm_refresh_evict,
+                                 refresh_evict_repeat=engine_config.dllm_refresh_evict_repeat,
+                                 window_conf=engine_config.dllm_window_conf,
+                                 window_k_max=engine_config.dllm_window_k_max,
+                                 window_topn=engine_config.dllm_window_topn,
+                                 window_sigma=engine_config.dllm_window_sigma,
+                                 window_adapt=engine_config.dllm_window_adapt,
+                                 freeze_conf=engine_config.dllm_freeze_conf,
+                                 focus_min_keep=engine_config.dllm_focus_min_keep,
+                                 focus_carry_avg=engine_config.dllm_focus_carry_avg,
+                                 focus_evict_gate=engine_config.dllm_focus_evict_gate,
+                                 fast_unmask=engine_config.dllm_fast_unmask,
+                                 masked_logits=engine_config.dllm_masked_logits,
+                                 fast_host=engine_config.dllm_fast_host,
+                                 eos_early_stop=engine_config.dllm_eos_early_stop)
         misc_config = cls(
             custom_module_map=engine_config.custom_module_map,
             empty_init=engine_config.empty_init,

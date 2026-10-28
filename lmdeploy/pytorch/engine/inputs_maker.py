@@ -291,23 +291,48 @@ class InputsMakerAsync:
                 focus_mask_seq_offsets[0] = 0
                 focus_mask_buffer = pinned.focus_mask_indices
 
-            for msg_idx, msg in enumerate(messages):
-                indices = msg.get_processing_indices()
-                proc_len = indices.numel()
-                processing_q_lens[msg_idx] = proc_len
-                processing_indices_buffer[proc_write:proc_write + proc_len].copy_(indices, non_blocking=False)
-
+            if dllm_cfg.fast_host:
+                # same buffers, filled with one copy each instead of ~5 small tensor writes per sequence
+                lens, idx_arrs, prog, avgs, mloc, moff = [], [], [], [], [], [0]
+                for msg in messages:
+                    indices = msg.get_processing_indices().numpy()
+                    lens.append(indices.size)
+                    idx_arrs.append(indices)
+                    if focus_enabled:
+                        focus_info = msg.get_focus_info()
+                        prog.append(focus_info.rightmost_processed)
+                        avgs.append(focus_info.avg_decoded_tokens)
+                        local = focus_info.mask_local_indices.numpy()
+                        mloc.append(local + proc_write)
+                        mask_write += local.size
+                        moff.append(mask_write)
+                    proc_write += indices.size
+                processing_q_lens.copy_(torch.from_numpy(np.asarray(lens, dtype=np.int64)))
+                processing_indices_buffer[:proc_write].copy_(torch.from_numpy(np.concatenate(idx_arrs)))
                 if focus_enabled:
-                    focus_info = msg.get_focus_info()
-                    focus_block_progress[msg_idx] = focus_info.rightmost_processed
-                    focus_avg_tensor[msg_idx] = float(focus_info.avg_decoded_tokens)
-                    local_indices = focus_info.mask_local_indices
-                    local_count = local_indices.numel()
-                    dst = focus_mask_buffer[mask_write:mask_write + local_count]
-                    torch.add(local_indices, proc_write, out=dst)
-                    mask_write += local_count
-                    focus_mask_seq_offsets[msg_idx + 1] = mask_write
-                proc_write += proc_len
+                    focus_block_progress.copy_(torch.from_numpy(np.asarray(prog, dtype=np.int32)))
+                    focus_avg_tensor.copy_(torch.from_numpy(np.asarray(avgs, dtype=np.float32)))
+                    focus_mask_seq_offsets.copy_(torch.from_numpy(np.asarray(moff, dtype=np.int32)))
+                    if mask_write:
+                        focus_mask_buffer[:mask_write].copy_(torch.from_numpy(np.concatenate(mloc)))
+            else:
+                for msg_idx, msg in enumerate(messages):
+                    indices = msg.get_processing_indices()
+                    proc_len = indices.numel()
+                    processing_q_lens[msg_idx] = proc_len
+                    processing_indices_buffer[proc_write:proc_write + proc_len].copy_(indices, non_blocking=False)
+
+                    if focus_enabled:
+                        focus_info = msg.get_focus_info()
+                        focus_block_progress[msg_idx] = focus_info.rightmost_processed
+                        focus_avg_tensor[msg_idx] = float(focus_info.avg_decoded_tokens)
+                        local_indices = focus_info.mask_local_indices
+                        local_count = local_indices.numel()
+                        dst = focus_mask_buffer[mask_write:mask_write + local_count]
+                        torch.add(local_indices, proc_write, out=dst)
+                        mask_write += local_count
+                        focus_mask_seq_offsets[msg_idx + 1] = mask_write
+                    proc_write += proc_len
 
             processing_indices = processing_indices_buffer[:proc_write]
             if focus_enabled:

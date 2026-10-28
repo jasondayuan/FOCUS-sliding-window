@@ -148,6 +148,10 @@ class ModelAgentStrategy(ABC):
         """Hook to reshape logits before sampling."""
         return logits
 
+    def compute_logits(self, get_logits, hidden_states: torch.Tensor, inputs: 'ModelInputs') -> torch.Tensor:
+        """Hook: logits for sampling from the model's last hidden states."""
+        return self.reshape_logits(get_logits(hidden_states), inputs)
+
     @abstractmethod
     @contextmanager
     def broadcast_next_token(self, next_token_ids: torch.Tensor, extra_inputs: ExtraInputs, dist_ctx: 'DistContext'):
