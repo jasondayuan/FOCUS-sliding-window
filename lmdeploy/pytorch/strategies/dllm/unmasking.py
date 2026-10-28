@@ -57,6 +57,7 @@ class UnmaskingProcessor:
         scores = torch.where(is_masked, scores, scores.new_zeros((1, )))
 
         scores = scores.view(-1, block_size)
+        conf = scores
         dllm_mask = dllm_mask.view(-1, block_size)
         _, indices = scores.topk(1, dim=-1)
         scores = scores.scatter(-1, indices, threshold)
@@ -64,7 +65,7 @@ class UnmaskingProcessor:
         is_masked = is_masked.view_as(dllm_mask)
         is_masked &= scores >= threshold
         dllm_mask[is_masked] = DLLM_UNMASKED
-        return dllm_mask.flatten()
+        return dllm_mask.flatten(), conf.flatten()
 
     def sequential(self, dllm_mask: torch.Tensor):
         """sequential."""
@@ -87,10 +88,14 @@ class UnmaskingProcessor:
 
     @record_function('unmasking')
     def __call__(self, logits: torch.Tensor, input_ids: torch.Tensor, token_ids: torch.Tensor, dllm_mask: torch.Tensor):
-        """call."""
+        """call.
+
+        Returns (dllm_mask, token_ids, conf), where conf holds this step's confidence of every masked, processed
+        position (0 elsewhere) for the dynamic strategy and is None otherwise.
+        """
         strategy = self.dllm_config.unmasking_strategy
         if strategy is None:
-            return dllm_mask
+            return dllm_mask, token_ids, None
 
         # reshape to [num_blocks, block_size]
         block_size = self.dllm_config.block_length
@@ -105,13 +110,14 @@ class UnmaskingProcessor:
 
         dllm_mask = dllm_mask.flatten()
         token_ids = torch.where(dllm_mask != DLLM_MASKED, input_ids, token_ids)
+        conf = None
         if strategy == UnmaskingStrategy.LOW_CONFIDENCE_STATIC:
             dllm_mask = self.low_confidence_static(logits, token_ids, dllm_mask)
         elif strategy == UnmaskingStrategy.LOW_CONFIDENCE_DYNAMIC:
-            dllm_mask = self.low_confidence_dynamic(logits, token_ids, dllm_mask)
+            dllm_mask, conf = self.low_confidence_dynamic(logits, token_ids, dllm_mask)
         elif strategy == UnmaskingStrategy.SEQUENTIAL:
             dllm_mask = self.sequential(dllm_mask)
         else:
             raise RuntimeError(f'strategy {strategy} not supported.')
 
-        return dllm_mask, token_ids
+        return dllm_mask, token_ids, conf

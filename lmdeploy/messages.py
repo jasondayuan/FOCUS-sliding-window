@@ -358,6 +358,10 @@ class PytorchEngineConfig:
         dllm_enable_focus (bool): enable FOCUS token-eviction refinement for DLLM decoding.
         dllm_focus_alpha (float): Optional multiplier to derive a dynamic retain count when FOCUS is enabled.
         dllm_track (bool): Enable processed-token tracking for DLLM decode steps.
+        dllm_window_k (int): Sliding-window lookahead. When > 0 (requires delayed cache), each decode step only
+            feeds block positions <= rightmost_decoded + k into the model. 0 disables the window.
+        dllm_window_prefix_granularity (int): When > 0, replace the delayed-cache rule with caching only the
+            longest decoded prefix, rounded down to a multiple of this granularity. 0 keeps the default rule.
     """
     dtype: str = 'auto'
     tp: int = 1
@@ -408,6 +412,8 @@ class PytorchEngineConfig:
     dllm_enable_focus: bool = False
     dllm_focus_alpha: float = 1.0
     dllm_track: bool = False
+    dllm_window_k: int = 0
+    dllm_window_prefix_granularity: int = 0
 
     role: EngineRole = EngineRole.Hybrid
     migration_backend: MigrationBackend = MigrationBackend.DLSlime
@@ -431,6 +437,8 @@ class PytorchEngineConfig:
         if self.dllm_enable_focus:
             assert self.dllm_enable_delayed_cache, '--dllm-enable-focus requires --dllm-enable-delayed-cache.'
             assert self.dllm_focus_alpha >= 1, '--dllm-enable-focus requires dllm-focus-alpha >= 1.0.'
+        if self.dllm_window_k > 0 or self.dllm_window_prefix_granularity > 0:
+            assert self.dllm_enable_delayed_cache, '--dllm-window-* requires --dllm-enable-delayed-cache.'
         if self.quant_policy > 0 and self.device_type not in ['cuda', 'ascend']:
             assert False, \
                    'kv cache quantization only works for CUDA and ASCEND.'

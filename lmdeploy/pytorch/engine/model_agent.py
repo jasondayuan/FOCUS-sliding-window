@@ -13,7 +13,7 @@ import torch
 import torch.distributed as dist
 from torch.profiler import ProfilerActivity, profile, record_function
 
-from lmdeploy.pytorch.consts import DLLM_META_PROCESSED_TOKENS
+from lmdeploy.pytorch.consts import DLLM_META_INPUT_TOKENS, DLLM_META_PROCESSED_TOKENS
 from lmdeploy.pytorch.disagg.config import EngineRole
 from lmdeploy.pytorch.utils import wait_for_async_tasks
 from lmdeploy.serve.openai.protocol import UpdateParamsRequest
@@ -248,6 +248,8 @@ def model_forward(
                 past_key_values=cache_engine.gpu_cache,
                 context=context,
             )
+            # q_seqlens before FOCUS eviction, i.e. tokens fed to the first layers
+            input_q_seqlens = context.q_seqlens
             output = model(**input_dict)
             focus_processed = context.get_focus_processed_positions()
             if not isinstance(output, Dict):
@@ -267,12 +269,14 @@ def model_forward(
             if context.is_decoding and context.dllm_track:
                 seq_lens = context.q_seqlens[:len(inputs.seq_length)]
                 proc_counts = seq_lens.detach().to('cpu', dtype=torch.long).tolist()
+                input_counts = input_q_seqlens[:len(inputs.seq_length)].detach().to('cpu', dtype=torch.long).tolist()
                 if model_metas is None:
                     model_metas = [None] * len(proc_counts)
                 new_metas: List[Dict[str, Any]] = []
-                for meta, proc in zip(model_metas, proc_counts):
+                for meta, proc, num_input in zip(model_metas, proc_counts, input_counts):
                     entry = {} if meta is None else dict(meta)
                     entry[DLLM_META_PROCESSED_TOKENS] = proc
+                    entry[DLLM_META_INPUT_TOKENS] = num_input
                     new_metas.append(entry)
                 model_metas = new_metas
             output['model_metas'] = model_metas

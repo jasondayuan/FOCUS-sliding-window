@@ -438,6 +438,8 @@ class DLLMConfig:
     enable_focus: bool = False
     focus_alpha: Optional[float] = None
     track: bool = False
+    window_k: int = 0
+    window_prefix_granularity: int = 0
 
 
 @dataclass
@@ -463,7 +465,9 @@ class MiscConfig:
                                  enable_delayed_cache=engine_config.dllm_enable_delayed_cache,
                                  enable_focus=engine_config.dllm_enable_focus,
                                  focus_alpha=engine_config.dllm_focus_alpha,
-                                 track=engine_config.dllm_track)
+                                 track=engine_config.dllm_track,
+                                 window_k=engine_config.dllm_window_k,
+                                 window_prefix_granularity=engine_config.dllm_window_prefix_granularity)
         misc_config = cls(
             custom_module_map=engine_config.custom_module_map,
             empty_init=engine_config.empty_init,

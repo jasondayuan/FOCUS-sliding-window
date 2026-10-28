@@ -25,6 +25,8 @@ SeqList = List[SchedulerSequence]
 class DLLMExtraInputs(ExtraInputs):
     """DLLM extra inputs."""
     dllm_mask: torch.Tensor
+    # confidence of each masked, processed position at the last unmasking step (host-side window placement)
+    dllm_conf: Optional[torch.Tensor] = None
 
     def broadcast(self, src: int, group, async_op=False):
         return dist.broadcast(self.dllm_mask, src=src, group=group, async_op=async_op)
@@ -34,6 +36,7 @@ class DLLMExtraInputs(ExtraInputs):
 class DLLMExtraOutputs(ExtraOutputs):
     """Ar extra outputs."""
     dllm_mask: torch.Tensor
+    dllm_conf: Optional[torch.Tensor] = None
 
 
 def _check_stopwords_dllm(token_ids: torch.Tensor, stop_words: torch.Tensor, is_unmasked: torch.Tensor,
@@ -306,7 +309,10 @@ class DLLMModelAgentStrategy(ModelAgentStrategy):
     def make_extra_outputs(self, extra_inputs: DLLMExtraInputs, **kwargs) -> DLLMExtraOutputs:
         """Create extra outputs."""
         dllm_mask = extra_inputs.dllm_mask
-        return DLLMExtraOutputs(dllm_mask=dllm_mask)
+        conf = extra_inputs.dllm_conf
+        if conf is not None:
+            conf = conf.to(torch.float16)
+        return DLLMExtraOutputs(dllm_mask=dllm_mask, dllm_conf=conf)
 
     def update_inputs_for_next_step(self, model_inputs: 'ModelInputs', sampling_inputs: 'SamplingInputs',
                                     next_token_ids: torch.Tensor, model_metas: Any, extra_inputs: DLLMExtraInputs,
@@ -330,10 +336,11 @@ class DLLMModelAgentStrategy(ModelAgentStrategy):
         input_ids = self.slice_outputs(input_ids.flatten(), inputs.seq_length)
 
         cached_masks = self._temporarily_cache_unprocessed(dllm_mask, inputs)
-        dllm_mask, next_token_ids = self.unmasking_processor(logits, input_ids, next_token_ids, dllm_mask)
+        dllm_mask, next_token_ids, conf = self.unmasking_processor(logits, input_ids, next_token_ids, dllm_mask)
         self._restore_cached_unprocessed(dllm_mask, cached_masks)
 
         extra_inputs.dllm_mask = dllm_mask
+        extra_inputs.dllm_conf = conf
         return next_token_ids, extra_inputs
 
     def make_dummy_next_token(self, inputs: 'ModelInputs', logits: torch.Tensor, extra_inputs: DLLMExtraInputs):

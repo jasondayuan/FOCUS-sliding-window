@@ -1,0 +1,6 @@
+# experiment outputs: raw results, smoke runs, generated tables/plots/write-ups
+results*/
+smoke/
+report/
+*.samples.jsonl
+*.steps.json
