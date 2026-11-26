@@ -1,0 +1,25 @@
+{
+ "tag": "eb_ff_bs8_n64",
+ "mode": "eb_ff",
+ "mode_cfg": {
+  "rule": "eb",
+  "threshold": 0.9,
+  "stable_min_conf": -1.0,
+  "force_first": true,
+  "window_k": 0,
+  "focus": false,
+  "focus_alpha": 1.5,
+  "focus_min_keep": 16,
+  "evict_layer": 2
+ },
+ "batch_size": 8,
+ "n": 64,
+ "accuracy": 0.953125,
+ "wall_s": 134.901815829915,
+ "out_tokens": 20085,
+ "out_tok_per_s": 148.88606114333766,
+ "decoder_steps": 314,
+ "decoder_tokens_l01": 643072,
+ "decoder_tokens_deep": 643072,
+ "max_mem_gb": 65.80862331390381
+}

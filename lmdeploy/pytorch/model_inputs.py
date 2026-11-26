@@ -427,6 +427,8 @@ class StepContext:
     focus_params: FocusParams = None
     focus_view: FocusRuntimeView = None
     dllm_track: bool = False
+    # micro-batched decoding: hand per-step stats to the host after the output event instead of syncing on them
+    dllm_defer_host: bool = False
     ragged_tile_to_seq: torch.IntTensor = None
     ragged_seq_tile_offsets: torch.IntTensor = None
 
@@ -568,8 +570,11 @@ class StepContext:
             )
 
         dllm_track = False
+        dllm_defer_host = False
         if dllm_cfg is not None:
             dllm_track = dllm_cfg.track
+            dllm_defer_host = (int(getattr(dllm_cfg, 'decode_micro_batch', 0) or 0) > 0
+                               or int(getattr(dllm_cfg, 'gpu_multistep', 0) or 0) > 0)
 
         ret = StepContext(
             input_ids=input_ids_tensor,
@@ -607,6 +612,7 @@ class StepContext:
             focus_params=focus_params,
             focus_view=focus_view,
             dllm_track=dllm_track,
+            dllm_defer_host=dllm_defer_host,
             ragged_tile_to_seq=ragged_tile_to_seq,
             ragged_seq_tile_offsets=ragged_seq_tile_offsets,
         )

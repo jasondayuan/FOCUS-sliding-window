@@ -1,0 +1,18 @@
+{
+ "tag": "n4_noverify_bs64",
+ "concurrency": 64,
+ "n": 512,
+ "accuracy": 0.623046875,
+ "wall_s": 90.03997834399343,
+ "out_tokens": 212642,
+ "out_tok_per_s": 2361.6398394456673,
+ "hit_max_tokens": 97,
+ "stats_delta": {
+  "total_forwards": 1040,
+  "total_tokens": 213506,
+  "decode_reqs": 53633,
+  "accept_count": 53120,
+  "reject_count": 0
+ },
+ "tokens_per_req_step": 3.9808699867618818
+}

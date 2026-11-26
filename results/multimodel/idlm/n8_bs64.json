@@ -1,0 +1,18 @@
+{
+ "tag": "n8_bs64",
+ "concurrency": 64,
+ "n": 512,
+ "accuracy": 0.9375,
+ "wall_s": 136.01265650591813,
+ "out_tokens": 151912,
+ "out_tok_per_s": 1116.8960588119244,
+ "hit_max_tokens": 1,
+ "stats_delta": {
+  "total_forwards": 1000,
+  "total_tokens": 152804,
+  "decode_reqs": 45910,
+  "accept_count": 4795,
+  "reject_count": 20527
+ },
+ "tokens_per_req_step": 3.3283380527118274
+}

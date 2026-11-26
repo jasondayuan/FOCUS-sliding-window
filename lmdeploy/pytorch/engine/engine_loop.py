@@ -308,6 +308,11 @@ class EngineLoop:
             if out is not None:
                 step_outputs = self._make_infer_outputs(out, running=running, model_inputs=model_inputs)
                 self.resp_queue.put_nowait(step_outputs)
+                if num_loops > 1 and idx <= num_loops // 2:
+                    # with several loops the outputs are usually ready already, so get_output_async does not yield
+                    # while forward_event is set: let send_response_loop deliver the finished requests now, else
+                    # none reach the client (and no new request arrives) until the whole batch has drained
+                    await asyncio.sleep(0)
 
             # lock forward event
             # make sure that prefetch forward would not wait for detokenize

@@ -71,6 +71,8 @@ class SchedulerConfig:
     eviction_type: str = 'recompute'
     prefill_interval: int = 16
     max_active_adapters: int = 64
+    # > 0: at most this many sequences per decode forward (see PytorchEngineConfig.dllm_decode_micro_batch)
+    decode_micro_batch: int = 0
 
 
 @dataclass
@@ -456,6 +458,17 @@ class DLLMConfig:
     masked_logits: bool = False
     fast_host: bool = False
     eos_early_stop: bool = False
+    prefill_min_waiting: int = 0
+    prefill_max_wait_s: float = 0.5
+    decode_micro_batch: int = 0
+    force_first: bool = False
+    stable_unmask: bool = False
+    stable_min_conf: float = 0.0
+    stable_ctx: int = 0
+    force_first_min_conf: float = 0.0
+    entropy_bound: float = 0.0
+    unmask_budget: float = 0.0
+    gpu_multistep: int = 0
 
 
 @dataclass
@@ -499,7 +512,18 @@ class MiscConfig:
                                  fast_unmask=engine_config.dllm_fast_unmask,
                                  masked_logits=engine_config.dllm_masked_logits,
                                  fast_host=engine_config.dllm_fast_host,
-                                 eos_early_stop=engine_config.dllm_eos_early_stop)
+                                 eos_early_stop=engine_config.dllm_eos_early_stop,
+                                 prefill_min_waiting=engine_config.dllm_prefill_min_waiting,
+                                 prefill_max_wait_s=engine_config.dllm_prefill_max_wait_s,
+                                 decode_micro_batch=engine_config.dllm_decode_micro_batch,
+                                 force_first=engine_config.dllm_force_first,
+                                 stable_unmask=engine_config.dllm_stable_unmask,
+                                 stable_min_conf=engine_config.dllm_stable_min_conf,
+                                 stable_ctx=engine_config.dllm_stable_ctx,
+                                 force_first_min_conf=engine_config.dllm_force_first_min_conf,
+                                 entropy_bound=engine_config.dllm_entropy_bound,
+                                 unmask_budget=engine_config.dllm_unmask_budget,
+                                 gpu_multistep=engine_config.dllm_gpu_multistep)
         misc_config = cls(
             custom_module_map=engine_config.custom_module_map,
             empty_init=engine_config.empty_init,

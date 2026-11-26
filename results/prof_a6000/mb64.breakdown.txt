@@ -1,0 +1,68 @@
+steps=59 (+5 prefill forwards)  period mean 48.7 ms, median 47.4 ms
+GPU busy 29.7 ms/step (61%), idle 19.0 ms/step
+
+[gpu_idle_while_host] ms/step
+     5.27  fwd_decode
+     3.62  fwd_prefill
+     3.55  update_running
+     2.57  create_inputs
+     1.55  other host (loop glue, H2D prep, asyncio)
+     0.99  make_inputs
+     0.58  wait_out
+     0.39  stopping
+     0.19  schedule
+     0.16  infer_outputs
+     0.11  unmask
+
+[host_time_by_phase] ms/step
+    11.67  wait_out
+     7.74  fwd_decode
+     7.51  other host (loop glue, H2D prep, asyncio)
+     6.69  update_running
+     5.00  fwd_prefill
+     4.68  create_inputs
+     1.85  make_inputs
+     1.50  unmask
+     0.96  stopping
+     0.45  sampling
+     0.35  schedule
+     0.30  infer_outputs
+
+[gpu_ms_by_launch_phase] ms/step
+    25.51  fwd_decode
+     1.37  fwd_prefill
+     0.85  sampling
+     0.83  other host (loop glue, H2D prep, asyncio)
+     0.80  wait_out
+     0.19  unmask
+     0.05  stopping
+
+[gpu_ms_by_category] ms/step
+    16.52  gemm (linear layers)
+     9.34  attention
+     0.96  softmax / reduce / sort
+     0.82  elementwise / index / other
+     0.80  activation
+     0.70  norm
+     0.19  kv cache fill
+     0.15  rope
+     0.12  unmask (fused kernel)
+
+[top kernels] ms/step, launches/step
+   10.471    78.3  ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn ampere_bf16_s1688gemm_bf16_128x
+    8.616    28.0  _fwd_grouped_split_ragged_kernel _fwd_grouped_split_ragged_kernel
+    2.368    27.1  Kernel2 void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_32x3_t
+    1.598     3.2  ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_32x3_tn ampere_bf16_s16816gemm_bf16_25
+    1.405     5.6  Kernel2 void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_t
+    0.826     1.1  reduce_kernel void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<c10::B
+    0.800    30.4  _silu_and_mul_kernel _silu_and_mul_kernel
+    0.651    28.0  _reduce_split_kernel _reduce_split_kernel
+    0.444    56.0  _flat_add_rms_norm_kernel _flat_add_rms_norm_kernel
+    0.440     4.1  Kernel2 void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_t
+    0.333    60.7  elementwise_kernel void at::native::elementwise_kernel<(int)128, (int)4, void at::native::
+    0.219    61.7  _flat_rms_norm_kernel _flat_rms_norm_kernel
+    0.217     1.0  index_elementwise_kernel void at::native::index_elementwise_kernel<(int)128, (int)4, void 
+    0.174    28.0  _fill_kv_cache_sparse_kernel _fill_kv_cache_sparse_kernel
+    0.146    30.4  apply_rotary_pos_emb_qk_kernel apply_rotary_pos_emb_qk_kernel
+
+[memcpy] per step {"H2D": {"ms": 0.022, "count": 20.9, "kb": 82.1}, "D2H": {"ms": 0.014, "count": 8.3, "kb": 20.1}, "D2D": {"ms": 0.028, "count": 10.1, "kb": 5679.2}}

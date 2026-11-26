@@ -1,0 +1,18 @@
+{
+ "tag": "n2_bs1",
+ "concurrency": 1,
+ "n": 24,
+ "accuracy": 0.9583333333333334,
+ "wall_s": 105.69192599703092,
+ "out_tokens": 7766,
+ "out_tok_per_s": 73.47770349286814,
+ "hit_max_tokens": 0,
+ "stats_delta": {
+  "total_forwards": 4140,
+  "total_tokens": 7772,
+  "decode_reqs": 4116,
+  "accept_count": 3632,
+  "reject_count": 230
+ },
+ "tokens_per_req_step": 1.8882410106899903
+}

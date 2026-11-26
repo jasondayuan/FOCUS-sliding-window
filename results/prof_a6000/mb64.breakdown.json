@@ -1,0 +1,152 @@
+{
+ "steps": 59,
+ "prefill_forwards_in_window": 5,
+ "period_ms_mean": 48.683099440677964,
+ "period_ms_median": 47.421703,
+ "gpu_busy_ms": 29.697457627118645,
+ "gpu_idle_ms": 18.985677966101697,
+ "gpu_idle_while_host": {
+  "fwd_decode": 5.273728813559322,
+  "fwd_prefill": 3.6242372881355935,
+  "update_running": 3.5467796610169495,
+  "create_inputs": 2.5697457627118645,
+  "other host (loop glue, H2D prep, asyncio)": 1.5530508474576272,
+  "make_inputs": 0.9877966101694916,
+  "wait_out": 0.5833050847457627,
+  "stopping": 0.3855084745762712,
+  "schedule": 0.1935593220338983,
+  "infer_outputs": 0.15686440677966101,
+  "unmask": 0.10627118644067797,
+  "extra_out": 0.004745762711864407,
+  "sampling": 8.474576271186441e-05
+ },
+ "host_time_by_phase": {
+  "wait_out": 11.671864406779662,
+  "fwd_decode": 7.738983050847458,
+  "other host (loop glue, H2D prep, asyncio)": 7.5055084745762715,
+  "update_running": 6.687966101694916,
+  "fwd_prefill": 4.995084745762712,
+  "create_inputs": 4.675169491525424,
+  "make_inputs": 1.8466949152542373,
+  "unmask": 1.4959322033898306,
+  "stopping": 0.9611864406779662,
+  "sampling": 0.445,
+  "schedule": 0.35491525423728815,
+  "infer_outputs": 0.2994915254237288,
+  "extra_out": 0.005338983050847458
+ },
+ "gpu_ms_by_launch_phase": {
+  "fwd_decode": 25.50653445762689,
+  "fwd_prefill": 1.368372661016945,
+  "sampling": 0.8506070169491524,
+  "other host (loop glue, H2D prep, asyncio)": 0.8288155084745752,
+  "wait_out": 0.804351711864406,
+  "unmask": 0.18974601694915225,
+  "stopping": 0.051930728813559424
+ },
+ "gpu_ms_by_category": {
+  "gemm (linear layers)": 16.517806559322068,
+  "attention": 9.344303999999996,
+  "softmax / reduce / sort": 0.9615658474576135,
+  "elementwise / index / other": 0.8236436271186469,
+  "activation": 0.8012307457627096,
+  "norm": 0.7012861355932221,
+  "kv cache fill": 0.18702206779661024,
+  "rope": 0.1459886440677956,
+  "unmask (fused kernel)": 0.11751047457627116
+ },
+ "top_kernels": [
+  [
+   "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn",
+   10.471,
+   78.3
+  ],
+  [
+   "_fwd_grouped_split_ragged_kernel _fwd_grouped_split_ragged_kernel",
+   8.616,
+   28.0
+  ],
+  [
+   "Kernel2 void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_32x3_tn_align8>(T1::Params)",
+   2.368,
+   27.1
+  ],
+  [
+   "ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_32x3_tn ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_32x3_tn",
+   1.598,
+   3.2
+  ],
+  [
+   "Kernel2 void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8>(T1::Params)",
+   1.405,
+   5.6
+  ],
+  [
+   "reduce_kernel void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<c10::BFloat16, at::native::ArgMaxOps<float>, unsigned int, long, (int)4, (int)4>>(T3)",
+   0.826,
+   1.1
+  ],
+  [
+   "_silu_and_mul_kernel _silu_and_mul_kernel",
+   0.8,
+   30.4
+  ],
+  [
+   "_reduce_split_kernel _reduce_split_kernel",
+   0.651,
+   28.0
+  ],
+  [
+   "_flat_add_rms_norm_kernel _flat_add_rms_norm_kernel",
+   0.444,
+   56.0
+  ],
+  [
+   "Kernel2 void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_tn_align8>(T1::Params)",
+   0.44,
+   4.1
+  ],
+  [
+   "elementwise_kernel void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 12)]::operator ()() const::[lambda(c10::BFloat16) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)",
+   0.333,
+   60.7
+  ],
+  [
+   "_flat_rms_norm_kernel _flat_rms_norm_kernel",
+   0.219,
+   61.7
+  ],
+  [
+   "index_elementwise_kernel void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::index_copy_kernel_impl<at::native::OpaqueType<(int)2>>(at::TensorIterator &, long, long, long)::[lambda(int) (instance 1)]>(long, T3)",
+   0.217,
+   1.0
+  ],
+  [
+   "_fill_kv_cache_sparse_kernel _fill_kv_cache_sparse_kernel",
+   0.174,
+   28.0
+  ],
+  [
+   "apply_rotary_pos_emb_qk_kernel apply_rotary_pos_emb_qk_kernel",
+   0.146,
+   30.4
+  ]
+ ],
+ "memcpy_per_step": {
+  "H2D": {
+   "ms": 0.022,
+   "count": 20.9,
+   "kb": 82.1
+  },
+  "D2H": {
+   "ms": 0.014,
+   "count": 8.3,
+   "kb": 20.1
+  },
+  "D2D": {
+   "ms": 0.028,
+   "count": 10.1,
+   "kb": 5679.2
+  }
+ }
+}

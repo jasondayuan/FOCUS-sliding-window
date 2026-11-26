@@ -275,6 +275,12 @@ class Scheduler:
             self.block_manager.allocate(seq, prealloc_size)
             self.block_trie.allocate(seq)
 
+        micro_batch = self.scheduler_config.decode_micro_batch
+        if micro_batch > 0:
+            # micro-batched decoding: the sequences that waited longest first (arrive_time is refreshed on every
+            # output), so a sequence left out of one micro-batch is first in the next and none is starved
+            ready = sorted(self.ready, key=lambda seq: seq.arrive_time)
+            return ready[:min(micro_batch, self.scheduler_config.max_batches)], swap_in_map, swap_out_map, copy_map
         return self.ready[:self.scheduler_config.max_batches], swap_in_map, swap_out_map, copy_map
 
     def schedule(self, is_prefill: bool, prealloc_size: int = 0):

@@ -26,6 +26,13 @@ DLLM_CACHED = consts.DLLM_CACHED
 DLLM_MASK_DTYPE = np.uint8
 
 
+def _count_decoded_neighbors(dllm_mask: np.ndarray, dist: int) -> np.ndarray:
+    """Per position, how many other block positions within dist are not masked."""
+    decoded = (dllm_mask != DLLM_MASKED).astype(np.int16)
+    window = np.convolve(decoded, np.ones((2 * dist + 1, ), dtype=np.int16), mode='same')
+    return window - decoded
+
+
 class HistoryDLLMMask(HistoryTokenIds):
 
     def __init__(self, token_ids: np.ndarray = None, dtype: np.dtype = DLLM_MASK_DTYPE):
@@ -175,6 +182,12 @@ class SchedulerSequenceDLLM(SchedulerSequenceDefault):
                                           and getattr(cfg, 'refresh_evict_repeat', False)) if cfg else False
         # how often each decoded position of the block has been re-fed with its real id
         self._refeeds = np.zeros((self.dllm_block_length, ), dtype=np.int16)
+        # stable_unmask: prediction of the last step that processed each still-masked position (-1 = none)
+        self._stable_unmask = bool(getattr(cfg, 'stable_unmask', False)) if cfg else False
+        self._prev_pred = np.full((self.dllm_block_length, ), -1, dtype=np.int64)
+        # stable_ctx: decoded neighbors (within that distance) of each position when _prev_pred was predicted
+        self._stable_ctx = int(getattr(cfg, 'stable_ctx', 0) or 0) if cfg else 0
+        self._prev_ctx = np.zeros((self.dllm_block_length, ), dtype=np.int16)
         if self._strategy.enable_delayed_cache:
             prefix_granularity = int(getattr(cfg, 'window_prefix_granularity', 0) or 0) if cfg else 0
             delay = getattr(cfg, 'cache_delay', 'neighbor') if cfg else 'neighbor'
@@ -233,9 +246,42 @@ class SchedulerSequenceDLLM(SchedulerSequenceDefault):
     def delayed_cache_enabled(self) -> bool:
         return self._delayed_cache_state is not None
 
+    @property
+    def dllm_prev_pred(self) -> np.ndarray:
+        return self._prev_pred
+
+    def stable_prev_pred(self) -> np.ndarray:
+        """Previous predictions the stable rule may match this step (-1 elsewhere).
+
+        With stable_ctx, only positions that got a newly decoded neighbor since their previous prediction.
+        """
+        if self._stable_ctx <= 0:
+            return self._prev_pred
+        block = len(self._prev_pred)
+        now = _count_decoded_neighbors(self.dllm_mask[-block:], self._stable_ctx)
+        return np.where(now > self._prev_ctx, self._prev_pred, -1)
+
+    def record_predictions(self, token_ids: np.ndarray, dllm_mask: np.ndarray):
+        """Remember this step's predictions of the masks it left masked (call before update_token_ids).
+
+        A processed mask comes back with its argmax, an unprocessed one (outside the window / evicted) with the mask
+        token, which keeps its older prediction.
+        """
+        masked = dllm_mask == DLLM_MASKED
+        predicted = masked & (token_ids != self.dllm_mask_token)
+        self._prev_pred[predicted] = token_ids[predicted]
+        self._prev_pred[~masked] = -1
+        if self._stable_ctx > 0:
+            # the context these predictions were made in: the mask before this step's update
+            block = len(self._prev_pred)
+            ctx = _count_decoded_neighbors(self.dllm_mask[-block:], self._stable_ctx)
+            self._prev_ctx[predicted] = ctx[predicted]
+
     def _reset_delayed_cache_state(self):
         self._last_conf = None
         self._refeeds.fill(0)
+        self._prev_pred.fill(-1)
+        self._prev_ctx.fill(0)
         if self._delayed_cache_state is not None:
             self._delayed_cache_state.reset()
         if self._focus_state is not None:
@@ -547,6 +593,13 @@ class DLLMSequenceStrategy(SequenceStrategy):
         dllm_mask = batched_outputs.extra_outputs.dllm_mask
         dllm_conf = getattr(batched_outputs.extra_outputs, 'dllm_conf', None)
         stop_pos = batched_outputs.stop_pos
+        # set instead of the model_meta entries when the forward deferred them (dllm_decode_micro_batch)
+        track_counts = getattr(batched_outputs, 'dllm_track_counts', None)
+        if track_counts is not None:
+            track_counts = track_counts.tolist()
+        focus_progress = getattr(batched_outputs, 'dllm_focus_progress', None)
+        if focus_progress is not None:
+            focus_progress = focus_progress.tolist()
 
         batch_size = len(running)
         next_token_ids = next_token_ids.view(batch_size, -1).numpy()
@@ -573,14 +626,27 @@ class DLLMSequenceStrategy(SequenceStrategy):
 
             if is_decoding:
                 if self.track:
-                    processed_tokens = model_meta.get(consts.DLLM_META_PROCESSED_TOKENS)
-                    input_tokens = model_meta.get(consts.DLLM_META_INPUT_TOKENS)
+                    if track_counts is not None:
+                        processed_tokens, input_tokens = track_counts[0][idx], track_counts[1][idx]
+                        if msg._last_processing_indices is not None:
+                            # tokens fed to layer 0 are known on the host: this step's processing slice. The deferred
+                            # pre-eviction count read back garbage when FOCUS evicted under CUDA graph + micro-batch.
+                            input_tokens = int(msg._last_processing_indices.numel())
+                    else:
+                        processed_tokens = model_meta.get(consts.DLLM_META_PROCESSED_TOKENS)
+                        input_tokens = model_meta.get(consts.DLLM_META_INPUT_TOKENS)
                     msg.record_decode_stats(processed_tokens, input_tokens)
                 if self.enable_delayed_cache:
+                    if msg._delayed_cache_state.needs_warmup and getattr(self.dllm_config, 'gpu_multistep', 0):
+                        # gpu_multistep: a block retired inside the round and the GPU already ran its warmup step,
+                        # which is this output (a round-start step consumed the flag in get_processing_indices)
+                        msg._delayed_cache_state.needs_warmup = False
                     # Refresh delayed-cache bookkeeping using the existing mask
                     # so newly unmasked tokens still get one more iteration.
                     msg._update_delayed_cache_state()
-                if msg._focus_enabled and model_meta is not None:
+                if msg._focus_enabled and focus_progress is not None:
+                    msg.mark_focus_processed(focus_progress[idx])
+                elif msg._focus_enabled and model_meta is not None:
                     processed_rightmost = model_meta.get('focus_processed_rightmost')
                     msg.mark_focus_processed(processed_rightmost)
             if is_decoding and msg._refresh_evict_repeat and msg._last_processing_indices is not None:
@@ -589,6 +655,9 @@ class DLLMSequenceStrategy(SequenceStrategy):
             if is_decoding and dllm_conf is not None:
                 # cleared again by update_token_ids if this step retired the block
                 msg.update_conf(dllm_conf[idx])
+            if msg._stable_unmask:
+                # before update_token_ids, which overwrites the masked entries of token in place
+                msg.record_predictions(token, mask)
             # fill token
             if is_decoding and msg._window_adapt:
                 # before update_token_ids, which may swap in the next block

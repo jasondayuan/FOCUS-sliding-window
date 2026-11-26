@@ -1,0 +1,42 @@
+patched I-DLM/inference/sglang/sglang/srt/dllm/algorithm/idlm_blockN.py
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/workspace/I-DLM/inference/sglang/sglang/srt/dllm/algorithm/__init__.py", line 5, in <module>
+    from sglang.srt.dllm.config import DllmConfig
+  File "/workspace/I-DLM/inference/sglang/sglang/srt/dllm/config.py", line 3, in <module>
+    from sglang.srt.configs.model_config import ModelConfig
+  File "/workspace/I-DLM/inference/sglang/sglang/srt/configs/model_config.py", line 27, in <module>
+    from sglang.srt.layers.quantization import QUANTIZATION_METHODS
+  File "/workspace/I-DLM/inference/sglang/sglang/srt/layers/quantization/__init__.py", line 19, in <module>
+    from sglang.srt.layers.quantization.auto_round import AutoRoundConfig
+  File "/workspace/I-DLM/inference/sglang/sglang/srt/layers/quantization/auto_round.py", line 12, in <module>
+    from sglang.srt.layers.quantization.utils import get_scalar_types
+  File "/workspace/I-DLM/inference/sglang/sglang/srt/layers/quantization/utils.py", line 13, in <module>
+    from sglang.srt.layers.quantization.fp8_kernel import scaled_fp8_quant
+  File "/workspace/I-DLM/inference/sglang/sglang/srt/layers/quantization/fp8_kernel.py", line 50, in <module>
+    from sgl_kernel import sgl_per_token_quant_fp8
+  File "/workspace/venv-idlm/lib/python3.12/site-packages/sgl_kernel/__init__.py", line 5, in <module>
+    common_ops = _load_architecture_specific_ops()
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/venv-idlm/lib/python3.12/site-packages/sgl_kernel/load_utils.py", line 188, in _load_architecture_specific_ops
+    raise ImportError(error_msg)
+ImportError: 
+[sgl_kernel] CRITICAL: Could not load any common_ops library!
+
+Attempted locations:
+1. Architecture-specific pattern: /workspace/venv-idlm/lib/python3.12/site-packages/sgl_kernel/sm100/common_ops.* - found files: ['/workspace/venv-idlm/lib/python3.12/site-packages/sgl_kernel/sm100/common_ops.abi3.so']
+2. Fallback pattern: /workspace/venv-idlm/lib/python3.12/site-packages/sgl_kernel/common_ops.* - found files: []
+3. Standard Python import: common_ops - failed
+
+GPU Info:
+- Compute capability: 86
+- Expected variant: SM86 (precise math for compatibility)
+
+Please ensure sgl_kernel is properly installed with:
+pip install --upgrade sgl_kernel
+
+Error details from previous import attempts:
+- ImportError: libnuma.so.1: cannot open shared object file: No such file or directory
+- ModuleNotFoundError: No module named 'common_ops'
+
+IMPORT_FAIL

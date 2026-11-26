@@ -16,11 +16,13 @@ class DLLMEngineStrategy(EngineStrategy):
                  scheduler_config: SchedulerConfig,
                  cache_config: CacheConfig,
                  dllm_block_length: int,
-                 enable_delayed_cache: bool = False) -> None:
+                 enable_delayed_cache: bool = False,
+                 gpu_multistep: int = 0) -> None:
         self.scheduler_config = scheduler_config
         self.cache_config = cache_config
         self.dllm_block_length = dllm_block_length
         self.enable_delayed_cache = enable_delayed_cache
+        self.gpu_multistep = gpu_multistep
 
         self._check()
 
@@ -48,10 +50,13 @@ class DLLMEngineStrategy(EngineStrategy):
         """Get num_loops."""
         if not is_decoding:
             return 1
-        if self.enable_delayed_cache:
-            return 1
         block_size = self.cache_config.block_size
         dllm_block_length = self.dllm_block_length
         max_num_loops = block_size // dllm_block_length * 2
+        if self.enable_delayed_cache:
+            # the next step's processed positions depend on this step's result: only with them built on the GPU
+            if self.gpu_multistep <= 0:
+                return 1
+            return min(self.gpu_multistep, self.scheduler_config.prefill_interval, max_num_loops)
         num_loops = min(self.scheduler_config.prefill_interval, max_num_loops)
         return num_loops

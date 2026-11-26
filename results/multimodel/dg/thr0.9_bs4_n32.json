@@ -1,0 +1,25 @@
+{
+ "tag": "thr0.9_bs4_n32",
+ "mode": "thr0.9",
+ "mode_cfg": {
+  "rule": "thr",
+  "threshold": 0.9,
+  "stable_min_conf": -1.0,
+  "force_first": false,
+  "window_k": 0,
+  "focus": false,
+  "focus_alpha": 1.5,
+  "focus_min_keep": 16,
+  "evict_layer": 2
+ },
+ "batch_size": 4,
+ "n": 32,
+ "accuracy": 0.9375,
+ "wall_s": 57.75136038893834,
+ "out_tokens": 10094,
+ "out_tok_per_s": 174.78376149098298,
+ "decoder_steps": 201,
+ "decoder_tokens_l01": 205824,
+ "decoder_tokens_deep": 205824,
+ "max_mem_gb": 65.8086256980896
+}

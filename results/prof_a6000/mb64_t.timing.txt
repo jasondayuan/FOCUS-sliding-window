@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/workspace/prof/analyze_timing.py", line 17, in <module>
+    a, b = dec[0], dec[-1]
+           ~~~^^^
+IndexError: index 0 is out of bounds for axis 0 with size 0

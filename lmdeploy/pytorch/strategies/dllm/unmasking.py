@@ -48,8 +48,36 @@ class UnmaskingProcessor:
         dllm_mask = torch.where(is_masked, dllm_unmasked, dllm_mask)
         return dllm_mask.flatten()
 
-    def low_confidence_dynamic(self, logits: torch.Tensor, token_ids: torch.Tensor, dllm_mask: torch.Tensor):
-        """dynamic."""
+    def _entropy_bound_select(self, logits: torch.Tensor, is_masked: torch.Tensor, block_size: int):
+        """EB-Sampler selection (https://arxiv.org/abs/2505.24857, DiffusionGemma's default sampler).
+
+        Per block, take the masks in ascending entropy order while sum(entropy) - max(entropy) <= entropy_bound
+        (an upper bound on their joint mutual information). The lowest-entropy mask is always taken.
+        """
+        flat = logits.flatten(0, -2)
+        rows = is_masked.nonzero().flatten()
+        ent = torch.full((flat.size(0), ), float('inf'), dtype=torch.float32, device=flat.device)
+        if rows.numel() > 0:
+            logp = flat.index_select(0, rows).float().log_softmax(-1)
+            ent[rows] = -(logp.exp() * logp).sum(-1)
+        ent = ent.view(-1, block_size)
+        sorted_ent, order = ent.sort(dim=1)
+        # non-masked rows sort last with inf: inf - inf = nan compares False, so they are never taken
+        take = (sorted_ent.cumsum(1) - sorted_ent) <= self.dllm_config.entropy_bound
+        return torch.zeros_like(take).scatter(1, order, take) & is_masked.view(-1, block_size)
+
+    def low_confidence_dynamic(self,
+                               logits: torch.Tensor,
+                               token_ids: torch.Tensor,
+                               dllm_mask: torch.Tensor,
+                               prev_pred: torch.Tensor = None):
+        """dynamic.
+
+        Masked positions are the processed ones (the caller marks unprocessed masks as cached). On top of the
+        threshold / top-1 rule, force_first decodes the leftmost mask of every block and stable_unmask decodes the
+        masks whose prediction equals prev_pred (the prediction of the last step that processed them, -1 = none)
+        and, with stable_min_conf, whose confidence reaches that floor.
+        """
         block_size = self.dllm_config.block_length
         threshold = self.dllm_config.confidence_threshold
         is_masked = dllm_mask == DLLM_MASKED
@@ -64,12 +92,37 @@ class UnmaskingProcessor:
         scores = scores.view(-1, block_size)
         conf = scores
         dllm_mask = dllm_mask.view(-1, block_size)
-        _, indices = scores.topk(1, dim=-1)
-        scores = scores.scatter(-1, indices, threshold)
-
+        is_masked_flat = is_masked
         is_masked = is_masked.view_as(dllm_mask)
-        is_masked &= scores >= threshold
-        dllm_mask[is_masked] = DLLM_UNMASKED
+        if self.dllm_config.entropy_bound > 0:
+            unmask = self._entropy_bound_select(logits, is_masked_flat, block_size)
+        elif self.dllm_config.unmask_budget > 0:
+            # most confident first while sum(1 - conf) fits; non-masks (conf 0) sort last and the inf keeps them out
+            vals, order = conf.float().sort(dim=1, descending=True)
+            sorted_masked = is_masked.gather(1, order)
+            spent = (1 - vals).masked_fill(~sorted_masked, float('inf')).cumsum(dim=1)
+            take = spent <= self.dllm_config.unmask_budget
+            take[:, 0] = True
+            take &= sorted_masked
+            unmask = torch.zeros_like(is_masked).scatter(1, order, take)
+        else:
+            _, indices = scores.topk(1, dim=-1)
+            scores = scores.scatter(-1, indices, threshold)
+            unmask = is_masked & (scores >= threshold)
+        if self.dllm_config.force_first:
+            # argmax gives the first True; the is_masked term drops rows without any mask
+            first = is_masked.int().argmax(dim=1, keepdim=True)
+            pos = torch.arange(block_size, device=dllm_mask.device)
+            forced = is_masked & (pos[None, :] == first)
+            if self.dllm_config.force_first_min_conf > 0:
+                forced &= conf >= self.dllm_config.force_first_min_conf
+            unmask |= forced
+        if self.dllm_config.stable_unmask and prev_pred is not None:
+            stable = is_masked & (token_ids.view(-1, block_size) == prev_pred.view(-1, block_size))
+            if self.dllm_config.stable_min_conf > 0:
+                stable &= conf >= self.dllm_config.stable_min_conf
+            unmask |= stable
+        dllm_mask[unmask] = DLLM_UNMASKED
         return dllm_mask.flatten(), conf.flatten()
 
     def sequential(self, dllm_mask: torch.Tensor):
@@ -92,7 +145,12 @@ class UnmaskingProcessor:
         return dllm_mask.flatten()
 
     @record_function('unmasking')
-    def __call__(self, logits: torch.Tensor, input_ids: torch.Tensor, token_ids: torch.Tensor, dllm_mask: torch.Tensor):
+    def __call__(self,
+                 logits: torch.Tensor,
+                 input_ids: torch.Tensor,
+                 token_ids: torch.Tensor,
+                 dllm_mask: torch.Tensor,
+                 prev_pred: torch.Tensor = None):
         """call.
 
         Returns (dllm_mask, token_ids, conf), where conf holds this step's confidence of every masked, processed
@@ -119,7 +177,7 @@ class UnmaskingProcessor:
         if strategy == UnmaskingStrategy.LOW_CONFIDENCE_STATIC:
             dllm_mask = self.low_confidence_static(logits, token_ids, dllm_mask)
         elif strategy == UnmaskingStrategy.LOW_CONFIDENCE_DYNAMIC:
-            dllm_mask, conf = self.low_confidence_dynamic(logits, token_ids, dllm_mask)
+            dllm_mask, conf = self.low_confidence_dynamic(logits, token_ids, dllm_mask, prev_pred)
         elif strategy == UnmaskingStrategy.SEQUENTIAL:
             dllm_mask = self.sequential(dllm_mask)
         else:

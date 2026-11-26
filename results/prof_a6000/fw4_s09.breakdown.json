@@ -1,0 +1,151 @@
+{
+ "steps": 29,
+ "prefill_forwards_in_window": 12,
+ "period_ms_mean": 146.37484137931034,
+ "period_ms_median": 131.920842,
+ "gpu_busy_ms": 56.292068965517245,
+ "gpu_idle_ms": 90.08293103448277,
+ "gpu_idle_while_host": {
+  "update_running": 23.630689655172414,
+  "fwd_decode": 21.199310344827587,
+  "create_inputs": 20.646206896551725,
+  "fwd_prefill": 16.548275862068966,
+  "make_inputs": 2.4455172413793105,
+  "other host (loop glue, H2D prep, asyncio)": 2.248448275862069,
+  "wait_out": 1.356896551724138,
+  "schedule": 0.7220689655172414,
+  "infer_outputs": 0.5994827586206897,
+  "stopping": 0.39948275862068966,
+  "unmask": 0.2793103448275862,
+  "sampling": 0.003965517241379311,
+  "extra_out": 0.0032758620689655174
+ },
+ "host_time_by_phase": {
+  "fwd_decode": 59.13224137931035,
+  "fwd_prefill": 24.321551724137933,
+  "update_running": 23.630689655172414,
+  "create_inputs": 20.646206896551725,
+  "wait_out": 8.242758620689656,
+  "other host (loop glue, H2D prep, asyncio)": 2.763793103448276,
+  "make_inputs": 2.4455172413793105,
+  "unmask": 1.8746551724137932,
+  "stopping": 1.360689655172414,
+  "schedule": 0.7220689655172414,
+  "sampling": 0.6251724137931035,
+  "infer_outputs": 0.5994827586206897,
+  "extra_out": 0.01017241379310345
+ },
+ "gpu_ms_by_launch_phase": {
+  "fwd_decode": 37.915649689654956,
+  "unmask": 6.743999172413864,
+  "wait_out": 5.340212137931047,
+  "fwd_prefill": 3.9405897241381167,
+  "sampling": 1.6902825172413818,
+  "other host (loop glue, H2D prep, asyncio)": 0.5320945862068965,
+  "stopping": 0.06558617241379308
+ },
+ "gpu_ms_by_category": {
+  "gemm (linear layers)": 32.99632993103446,
+  "attention": 9.158942758620592,
+  "softmax / reduce / sort": 8.363911379310373,
+  "elementwise / index / other": 1.8144177931035546,
+  "norm": 1.562725724137908,
+  "activation": 1.526300034482759,
+  "rope": 0.41574286206896616,
+  "kv cache fill": 0.3900435172413798
+ },
+ "top_kernels": [
+  [
+   "Kernel2 void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8>(T1::Params)",
+   16.591,
+   34.9
+  ],
+  [
+   "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn",
+   12.106,
+   74.3
+  ],
+  [
+   "_fwd_grouped_split_ragged_kernel _fwd_grouped_split_ragged_kernel",
+   7.755,
+   28.0
+  ],
+  [
+   "cunn_SoftMaxForward void at::native::<unnamed>::cunn_SoftMaxForward<(int)8, c10::BFloat16, float, c10::BFloat16, at::native::<unnamed>::SoftMaxForwardEpilogue>(T4 *, const T2 *, int)",
+   6.649,
+   1.4
+  ],
+  [
+   "reduce_kernel void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<c10::BFloat16, at::native::ArgMaxOps<float>, unsigned int, long, (int)4, (int)4>>(T3)",
+   1.662,
+   1.4
+  ],
+  [
+   "ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_32x3_tn ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_32x3_tn",
+   1.56,
+   10.6
+  ],
+  [
+   "_silu_and_mul_kernel _silu_and_mul_kernel",
+   1.526,
+   39.6
+  ],
+  [
+   "_reduce_split_kernel _reduce_split_kernel",
+   1.176,
+   28.0
+  ],
+  [
+   "_flat_add_rms_norm_kernel _flat_add_rms_norm_kernel",
+   1.077,
+   56.0
+  ],
+  [
+   "index_elementwise_kernel void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::index_copy_kernel_impl<at::native::OpaqueType<(int)2>>(at::TensorIterator &, long, long, long)::[lambda(int) (instance 1)]>(long, T3)",
+   0.841,
+   1.0
+  ],
+  [
+   "Kernel2 void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_32x3_tn_align8>(T1::Params)",
+   0.712,
+   4.8
+  ],
+  [
+   "elementwise_kernel void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 12)]::operator ()() const::[lambda(c10::BFloat16) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)",
+   0.694,
+   79.2
+  ],
+  [
+   "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x4_tn ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x4_tn",
+   0.523,
+   11.6
+  ],
+  [
+   "apply_rotary_pos_emb_qk_kernel apply_rotary_pos_emb_qk_kernel",
+   0.416,
+   39.6
+  ],
+  [
+   "_flat_rms_norm_kernel _flat_rms_norm_kernel",
+   0.389,
+   80.2
+  ]
+ ],
+ "memcpy_per_step": {
+  "H2D": {
+   "ms": 0.025,
+   "count": 24.6,
+   "kb": 167.1
+  },
+  "D2H": {
+   "ms": 0.014,
+   "count": 8.7,
+   "kb": 40.0
+  },
+  "D2D": {
+   "ms": 0.003,
+   "count": 2.8,
+   "kb": 40.4
+  }
+ }
+}

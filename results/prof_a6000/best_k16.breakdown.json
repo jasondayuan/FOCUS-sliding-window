@@ -1,0 +1,152 @@
+{
+ "steps": 29,
+ "prefill_forwards_in_window": 3,
+ "period_ms_mean": 82.94680927586207,
+ "period_ms_median": 75.901491,
+ "gpu_busy_ms": 47.12775862068966,
+ "gpu_idle_ms": 35.81913793103448,
+ "gpu_idle_while_host": {
+  "update_running": 13.244827586206897,
+  "create_inputs": 7.540344827586208,
+  "fwd_decode": 4.6208620689655175,
+  "fwd_prefill": 3.5908620689655177,
+  "make_inputs": 2.2174137931034483,
+  "wait_out": 1.9644827586206899,
+  "other host (loop glue, H2D prep, asyncio)": 1.5120689655172415,
+  "schedule": 0.5531034482758621,
+  "infer_outputs": 0.4613793103448276,
+  "stopping": 0.0856896551724138,
+  "unmask": 0.027586206896551727,
+  "extra_out": 0.0005172413793103448,
+  "sampling": 0.0
+ },
+ "host_time_by_phase": {
+  "fwd_decode": 44.286206896551725,
+  "update_running": 13.244827586206897,
+  "create_inputs": 7.540344827586208,
+  "fwd_prefill": 5.83344827586207,
+  "wait_out": 4.435517241379311,
+  "make_inputs": 2.2174137931034483,
+  "other host (loop glue, H2D prep, asyncio)": 1.537241379310345,
+  "unmask": 1.4668965517241381,
+  "stopping": 0.9356896551724139,
+  "schedule": 0.5531034482758621,
+  "infer_outputs": 0.4613793103448276,
+  "sampling": 0.4291379310344828,
+  "extra_out": 0.005689655172413793
+ },
+ "gpu_ms_by_launch_phase": {
+  "fwd_decode": 39.61119524137858,
+  "wait_out": 3.167932655172431,
+  "fwd_prefill": 2.240349931034481,
+  "sampling": 1.6599319310344833,
+  "unmask": 0.29429148275862127,
+  "stopping": 0.057088103448275855,
+  "other host (loop glue, H2D prep, asyncio)": 0.0001566896551724138
+ },
+ "gpu_ms_by_category": {
+  "gemm (linear layers)": 29.632844206896547,
+  "attention": 9.805685482758609,
+  "softmax / reduce / sort": 1.7799722758621122,
+  "activation": 1.6847133448275735,
+  "norm": 1.676351275862096,
+  "elementwise / index / other": 1.429381310344898,
+  "rope": 0.4621419310344808,
+  "kv cache fill": 0.3460298275862067,
+  "unmask (fused kernel)": 0.21382637931034482
+ },
+ "top_kernels": [
+  [
+   "Kernel2 void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8>(T1::Params)",
+   13.832,
+   36.0
+  ],
+  [
+   "ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_32x3_tn ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_32x3_tn",
+   9.848,
+   51.3
+  ],
+  [
+   "_fwd_grouped_split_ragged_kernel _fwd_grouped_split_ragged_kernel",
+   8.395,
+   28.0
+  ],
+  [
+   "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn",
+   5.629,
+   33.4
+  ],
+  [
+   "_silu_and_mul_kernel _silu_and_mul_kernel",
+   1.684,
+   30.9
+  ],
+  [
+   "reduce_kernel void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<c10::BFloat16, at::native::ArgMaxOps<float>, unsigned int, long, (int)4, (int)4>>(T3)",
+   1.633,
+   1.1
+  ],
+  [
+   "_reduce_split_kernel _reduce_split_kernel",
+   1.289,
+   28.0
+  ],
+  [
+   "_flat_add_rms_norm_kernel _flat_add_rms_norm_kernel",
+   1.202,
+   56.0
+  ],
+  [
+   "elementwise_kernel void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 12)]::operator ()() const::[lambda(c10::BFloat16) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)",
+   0.683,
+   61.8
+  ],
+  [
+   "apply_rotary_pos_emb_qk_kernel apply_rotary_pos_emb_qk_kernel",
+   0.462,
+   30.9
+  ],
+  [
+   "index_elementwise_kernel void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::index_copy_kernel_impl<at::native::OpaqueType<(int)2>>(at::TensorIterator &, long, long, long)::[lambda(int) (instance 1)]>(long, T3)",
+   0.44,
+   1.0
+  ],
+  [
+   "_flat_rms_norm_kernel _flat_rms_norm_kernel",
+   0.403,
+   62.8
+  ],
+  [
+   "_fill_kv_cache_sparse_kernel _fill_kv_cache_sparse_kernel",
+   0.323,
+   28.0
+  ],
+  [
+   "_token_prob_kernel _token_prob_kernel",
+   0.214,
+   1.1
+  ],
+  [
+   "Kernel2 void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_tn_align8>(T1::Params)",
+   0.204,
+   1.9
+  ]
+ ],
+ "memcpy_per_step": {
+  "H2D": {
+   "ms": 0.024,
+   "count": 21.1,
+   "kb": 164.5
+  },
+  "D2H": {
+   "ms": 0.014,
+   "count": 8.6,
+   "kb": 38.9
+  },
+  "D2D": {
+   "ms": 0.045,
+   "count": 10.2,
+   "kb": 11351.9
+  }
+ }
+}

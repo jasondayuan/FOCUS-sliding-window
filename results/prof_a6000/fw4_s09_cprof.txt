@@ -1,0 +1,76 @@
+         3020422 function calls (3000479 primitive calls) in 8.610 seconds
+
+   Ordered by: internal time
+   List reduced from 190 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      219    1.057    0.005    3.820    0.017 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/engine/inputs_maker.py:241(create_model_inputs)
+    18680    0.688    0.000    1.513    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:358(record_decode_offsets)
+    18685    0.603    0.000    1.404    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:297(get_processing_indices)
+    18680    0.494    0.000    1.109    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:78(update_from_mask)
+      220    0.461    0.002    4.756    0.022 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:539(update_running)
+    18846    0.424    0.000    0.980    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:426(_update_token_ids_decode)
+   112412    0.407    0.000    0.407    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+    18680    0.331    0.000    0.331    0.000 {built-in method torch.roll}
+    18685    0.283    0.000    0.694    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:313(get_focus_info)
+    18685    0.225    0.000    0.473    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:252(_window_end)
+    37805    0.220    0.000    0.220    0.000 {method 'numpy' of 'torch._C.TensorBase' objects}
+    17234    0.194    0.000    0.194    0.000 {method 'nonzero' of 'torch._C.TensorBase' objects}
+    18680    0.193    0.000    0.193    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:75(mark_cached)
+   112090    0.187    0.000    0.213    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:204(dllm_mask)
+    73445    0.172    0.000    0.657    0.000 /opt/conda/lib/python3.11/site-packages/numpy/_core/numeric.py:680(flatnonzero)
+    37365    0.157    0.000    0.157    0.000 {built-in method torch.from_numpy}
+    18685    0.152    0.000    0.152    0.000 {built-in method torch.add}
+    17395    0.127    0.000    0.127    0.000 {method 'at' of 'numpy.ufunc' objects}
+    18846    0.126    0.000    1.208    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:473(update_token_ids)
+    73445    0.107    0.000    0.208    0.000 /opt/conda/lib/python3.11/site-packages/numpy/_core/fromnumeric.py:1904(ravel)
+    37692    0.104    0.000    0.298    0.000 /opt/conda/lib/python3.11/site-packages/numpy/_core/fromnumeric.py:89(_wrapreduction_any_all)
+    73445    0.094    0.000    0.094    0.000 {method 'nonzero' of 'numpy.ndarray' objects}
+      150    0.090    0.001    0.090    0.001 {built-in method torch.repeat_interleave}
+    37858    0.085    0.000    0.122    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/messages.py:395(__setitem__)
+    73459    0.079    0.000    0.193    0.000 /opt/conda/lib/python3.11/site-packages/numpy/_core/fromnumeric.py:51(_wrapfunc)
+    18685    0.078    0.000    0.078    0.000 {method 'copy_' of 'torch._C.TensorBase' objects}
+    18680    0.078    0.000    1.208    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:248(_update_delayed_cache_state)
+    18685    0.061    0.000    0.322    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:109(get_processing_indices)
+    17234    0.060    0.000    0.060    0.000 {method 'squeeze' of 'torch._C.TensorBase' objects}
+    73445    0.057    0.000    0.250    0.000 /opt/conda/lib/python3.11/site-packages/numpy/_core/fromnumeric.py:2018(nonzero)
+
+
+         3020422 function calls (3000479 primitive calls) in 8.610 seconds
+
+   Ordered by: cumulative time
+   List reduced from 190 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      220    0.461    0.002    4.756    0.022 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:539(update_running)
+      219    0.001    0.000    3.855    0.018 /opt/conda/lib/python3.11/site-packages/torch/utils/_contextlib.py:117(decorate_context)
+      219    0.005    0.000    3.848    0.018 /opt/conda/lib/python3.11/contextlib.py:78(inner)
+      219    1.057    0.005    3.820    0.017 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/engine/inputs_maker.py:241(create_model_inputs)
+    18680    0.688    0.000    1.513    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:358(record_decode_offsets)
+    18685    0.603    0.000    1.404    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:297(get_processing_indices)
+    18846    0.126    0.000    1.208    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:473(update_token_ids)
+    18680    0.078    0.000    1.208    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:248(_update_delayed_cache_state)
+    18680    0.494    0.000    1.109    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:78(update_from_mask)
+    18846    0.424    0.000    0.980    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:426(_update_token_ids_decode)
+    18685    0.283    0.000    0.694    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:313(get_focus_info)
+    73445    0.172    0.000    0.657    0.000 /opt/conda/lib/python3.11/site-packages/numpy/_core/numeric.py:680(flatnonzero)
+    18685    0.225    0.000    0.473    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:252(_window_end)
+   112412    0.407    0.000    0.407    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+    37692    0.056    0.000    0.354    0.000 /opt/conda/lib/python3.11/site-packages/numpy/_core/fromnumeric.py:2589(all)
+    74720    0.053    0.000    0.348    0.000 {method 'sum' of 'numpy.ndarray' objects}
+    18680    0.331    0.000    0.331    0.000 {built-in method torch.roll}
+    18685    0.061    0.000    0.322    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:109(get_processing_indices)
+    37692    0.104    0.000    0.298    0.000 /opt/conda/lib/python3.11/site-packages/numpy/_core/fromnumeric.py:89(_wrapreduction_any_all)
+    74720    0.039    0.000    0.296    0.000 /opt/conda/lib/python3.11/site-packages/numpy/_core/_methods.py:49(_sum)
+    73445    0.057    0.000    0.250    0.000 /opt/conda/lib/python3.11/site-packages/numpy/_core/fromnumeric.py:2018(nonzero)
+    37805    0.220    0.000    0.220    0.000 {method 'numpy' of 'torch._C.TensorBase' objects}
+   112090    0.187    0.000    0.213    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:204(dllm_mask)
+    73445    0.107    0.000    0.208    0.000 /opt/conda/lib/python3.11/site-packages/numpy/_core/fromnumeric.py:1904(ravel)
+    17234    0.194    0.000    0.194    0.000 {method 'nonzero' of 'torch._C.TensorBase' objects}
+    73459    0.079    0.000    0.193    0.000 /opt/conda/lib/python3.11/site-packages/numpy/_core/fromnumeric.py:51(_wrapfunc)
+    18680    0.193    0.000    0.193    0.000 /workspace/FOCUS-sliding-window/lmdeploy/pytorch/strategies/dllm/sequence.py:75(mark_cached)
+    37365    0.157    0.000    0.157    0.000 {built-in method torch.from_numpy}
+    18685    0.152    0.000    0.152    0.000 {built-in method torch.add}
+    17395    0.127    0.000    0.127    0.000 {method 'at' of 'numpy.ufunc' objects}
+
+

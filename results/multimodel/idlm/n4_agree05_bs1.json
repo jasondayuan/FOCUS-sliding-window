@@ -1,0 +1,18 @@
+{
+ "tag": "n4_agree05_bs1",
+ "concurrency": 1,
+ "n": 24,
+ "accuracy": 0.9166666666666666,
+ "wall_s": 67.7532334830612,
+ "out_tokens": 7787,
+ "out_tok_per_s": 114.93178405938083,
+ "hit_max_tokens": 0,
+ "stats_delta": {
+  "total_forwards": 2620,
+  "total_tokens": 7800,
+  "decode_reqs": 2596,
+  "accept_count": 1537,
+  "reject_count": 522
+ },
+ "tokens_per_req_step": 3.00462249614792
+}

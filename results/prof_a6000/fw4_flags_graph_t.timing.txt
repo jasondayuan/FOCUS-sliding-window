@@ -1,0 +1,10 @@
+{
+ "decode_steps": 149,
+ "big_decode_steps": 149,
+ "prefill_forwards": 74,
+ "mean_bs": 124.35570469798658,
+ "period_ms_per_decode_step": 106.27971214536053,
+ "fwd_decode_host_ms_median": 42.728789150714874,
+ "fwd_prefill_host_ms_median": 54.56043779850006,
+ "prefill_ms_per_decode_step": 26.535521767683477
+}

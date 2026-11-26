@@ -1,0 +1,67 @@
+steps=29 (+12 prefill forwards)  period mean 146.4 ms, median 131.9 ms
+GPU busy 56.3 ms/step (38%), idle 90.1 ms/step
+
+[gpu_idle_while_host] ms/step
+    23.63  update_running
+    21.20  fwd_decode
+    20.65  create_inputs
+    16.55  fwd_prefill
+     2.45  make_inputs
+     2.25  other host (loop glue, H2D prep, asyncio)
+     1.36  wait_out
+     0.72  schedule
+     0.60  infer_outputs
+     0.40  stopping
+     0.28  unmask
+
+[host_time_by_phase] ms/step
+    59.13  fwd_decode
+    24.32  fwd_prefill
+    23.63  update_running
+    20.65  create_inputs
+     8.24  wait_out
+     2.76  other host (loop glue, H2D prep, asyncio)
+     2.45  make_inputs
+     1.87  unmask
+     1.36  stopping
+     0.72  schedule
+     0.63  sampling
+     0.60  infer_outputs
+
+[gpu_ms_by_launch_phase] ms/step
+    37.92  fwd_decode
+     6.74  unmask
+     5.34  wait_out
+     3.94  fwd_prefill
+     1.69  sampling
+     0.53  other host (loop glue, H2D prep, asyncio)
+     0.07  stopping
+
+[gpu_ms_by_category] ms/step
+    27.29  elementwise / index / other
+    15.29  gemm (linear layers)
+     9.52  softmax / reduce / sort
+     1.56  norm
+     1.53  activation
+     0.42  rope
+     0.39  kv cache fill
+     0.23  attention
+
+[top kernels] ms/step, launches/step
+   17.703    44.5  Kernel2
+   12.106    74.3  ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn
+    7.755    28.0  _fwd_grouped_split_ragged_kernel
+    6.649     1.4  cunn_SoftMaxForward
+    1.686     8.5  reduce_kernel
+    1.560    10.6  ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_32x3_tn
+    1.526    39.6  _silu_and_mul_kernel
+    1.176    28.0  _reduce_split_kernel
+    1.077    56.0  _flat_add_rms_norm_kernel
+    0.846     2.8  index_elementwise_kernel
+    0.730    94.0  elementwise_kernel
+    0.523    11.6  ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x4_tn
+    0.416    39.6  apply_rotary_pos_emb_qk_kernel
+    0.389    80.2  _flat_rms_norm_kernel
+    0.366     3.2  ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_32x6_tn
+
+[memcpy] per step {"H2D": {"ms": 0.025, "count": 24.6, "kb": 167.1}, "D2H": {"ms": 0.014, "count": 8.7, "kb": 40.0}, "D2D": {"ms": 0.003, "count": 2.8, "kb": 40.4}}

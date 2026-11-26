@@ -1,5 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import logging
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Optional
 
@@ -68,10 +69,14 @@ class InputsMakerConfig:
     is_ssm: bool = False
     dp: int = 1
     spec_decoding: bool = False
+    # > 0: coalesce prefills, see InputsMakerAsync.do_prefill_default
+    prefill_min_waiting: int = 0
+    prefill_max_wait_s: float = 0.5
 
     @staticmethod
     def from_engine(engine: 'Engine'):
         cache_config = engine.cache_config
+        dllm_config = getattr(engine.misc_config, 'dllm_config', None)
         return InputsMakerConfig(
             spec_decoding=engine.specdecode_config is not None,
             max_batches=cache_config.max_batches,
@@ -79,6 +84,8 @@ class InputsMakerConfig:
             role=cache_config.role,
             is_ssm=len(cache_config.states_shapes) > 0,
             dp=engine.dist_config.dp,
+            prefill_min_waiting=int(getattr(dllm_config, 'prefill_min_waiting', 0) or 0),
+            prefill_max_wait_s=float(getattr(dllm_config, 'prefill_max_wait_s', 0.5)),
         )
 
 
@@ -508,6 +515,8 @@ class InputsMakerAsync:
         num_ready = scheduler.num_ready()
         num_waiting = scheduler.num_waiting()
         max_batches = self.config.max_batches
+        if self.config.prefill_min_waiting > 0 and self.config.role != EngineRole.Prefill:
+            return self._do_prefill_coalesced(num_ready, num_waiting, max_batches)
         # prefill if too much waiting
         permitted_waiting = 4 if (self.config.role != EngineRole.Prefill) else 1
         if num_waiting >= permitted_waiting:
@@ -517,6 +526,22 @@ class InputsMakerAsync:
             return True
         # decoding
         return False
+
+    def _do_prefill_coalesced(self, num_ready: int, num_waiting: int, max_batches: int):
+        """Prefill only in batches: a prefill forward has a fixed host cost of a full step, so prefilling one or
+        two arrivals at a time stalls every sequence for a whole step per arrival.
+
+        Unlike the default rule this counts running sequences as active: do_prefill is also called from
+        prefetch_next_inputs while the current batch is in flight, when num_ready alone is about 0.
+        """
+        scheduler = self.scheduler
+        if num_waiting >= self.config.prefill_min_waiting:
+            return True
+        if num_ready + scheduler.num_running() < max_batches * 0.5:
+            return True
+        # bound the extra wait (e.g. the last few requests of a burst would otherwise never reach the threshold)
+        oldest = min(seq.arrive_time for seq in scheduler.waiting)
+        return time.perf_counter() - oldest >= self.config.prefill_max_wait_s
 
     async def _send_next_inputs_impl(self, prefill: bool = None, enable_empty: bool = False):
         forward_inputs = self._make_forward_inputs(prefill, enable_empty)
@@ -543,6 +568,10 @@ class InputsMakerAsync:
         prefill = self.do_prefill()
         if prefill:
             enable = True
+        elif getattr(self.engine_strategy, 'gpu_multistep', 0) > 0:
+            # dllm_gpu_multistep: a decode prefetch would only batch the sequences outside the running round, which
+            # splits the population into several small decode groups for good; schedule them all after the round
+            return None, None
         else:
             num_ready = scheduler.num_ready()
             is_decoding = self.forward_inputs['inputs'].is_decoding

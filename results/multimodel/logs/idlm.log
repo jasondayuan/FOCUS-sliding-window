@@ -1,0 +1,59 @@
+<frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
+<frozen importlib._bootstrap_external>:1301: FutureWarning: The cuda.nvrtc module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.nvrtc module instead.
+IDLM_OK 2.9.1+cu128
+06:41:15 SETUP_OK
+06:41:15 SERVER n4
+06:42:15 START n4_bs64
+06:43:42 END n4_bs64 rc=0
+06:43:42 START n4_bs32
+06:44:36 END n4_bs32 rc=0
+06:44:36 START n4_bs8
+06:45:17 END n4_bs8 rc=0
+06:45:17 START n4_bs1
+06:46:27 END n4_bs1 rc=0
+06:46:37 SERVER n2
+06:46:57 START n2_bs64
+06:48:24 END n2_bs64 rc=0
+06:48:24 START n2_bs32
+06:49:18 END n2_bs32 rc=0
+06:49:18 START n2_bs8
+06:50:17 END n2_bs8 rc=0
+06:50:17 START n2_bs1
+06:52:06 END n2_bs1 rc=0
+06:52:12 SERVER n8
+06:52:32 START n8_bs64
+06:54:52 END n8_bs64 rc=0
+06:54:52 START n8_bs32
+06:56:09 END n8_bs32 rc=0
+06:56:09 START n8_bs8
+06:56:53 END n8_bs8 rc=0
+06:56:53 START n8_bs1
+06:58:02 END n8_bs1 rc=0
+06:58:08 SERVER n4_noverify
+06:58:28 START n4_noverify_bs64
+07:00:01 END n4_noverify_bs64 rc=0
+07:00:01 START n4_noverify_bs32
+07:01:03 END n4_noverify_bs32 rc=0
+07:01:03 START n4_noverify_bs8
+07:01:49 END n4_noverify_bs8 rc=0
+07:01:49 START n4_noverify_bs1
+07:02:59 END n4_noverify_bs1 rc=0
+07:03:08 SERVER n4_top5
+07:03:28 START n4_top5_bs64
+07:04:48 END n4_top5_bs64 rc=0
+07:04:48 START n4_top5_bs32
+07:05:38 END n4_top5_bs32 rc=0
+07:05:38 START n4_top5_bs8
+07:06:16 END n4_top5_bs8 rc=0
+07:06:16 START n4_top5_bs1
+07:07:18 END n4_top5_bs1 rc=0
+07:07:24 SERVER n4_agree05
+07:07:44 START n4_agree05_bs64
+07:09:12 END n4_agree05_bs64 rc=0
+07:09:12 START n4_agree05_bs32
+07:10:06 END n4_agree05_bs32 rc=0
+07:10:06 START n4_agree05_bs8
+07:10:47 END n4_agree05_bs8 rc=0
+07:10:47 START n4_agree05_bs1
+07:11:58 END n4_agree05_bs1 rc=0
+07:12:04 ALL_DONE

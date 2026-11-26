@@ -83,7 +83,8 @@ class DLLMStrategyFactory(StrategyFactoryBase):
         return DLLMEngineStrategy(cache_config=cache_config,
                                   scheduler_config=scheduler_config,
                                   dllm_block_length=self.dllm_block_length,
-                                  enable_delayed_cache=self.dllm_config.enable_delayed_cache)
+                                  enable_delayed_cache=self.dllm_config.enable_delayed_cache,
+                                  gpu_multistep=self.dllm_config.gpu_multistep)
 
     def build_sequence_strategy(self) -> SequenceStrategy:
         from .sequence import DLLMSequenceStrategy

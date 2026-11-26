@@ -54,6 +54,31 @@ def add_engine_args(ap):
                     help='stop once a stop word and its prefix are decoded, not when the whole block is')
     ap.add_argument('--focus-evict-gate', type=float, default=0.0,
                     help='evict only in steps where FOCUS would evict at least this many masks per sequence')
+    ap.add_argument('--prefill-min-waiting', type=int, default=0,
+                    help='> 0: coalesce prefills until this many requests wait (see dllm_prefill_min_waiting)')
+    ap.add_argument('--prefill-max-wait-s', type=float, default=0.5,
+                    help='with --prefill-min-waiting: longest a waiting request is held back')
+    ap.add_argument('--decode-micro-batch', type=int, default=0,
+                    help='> 0: at most this many sequences per decode forward, overlapping host work of one '
+                    'micro-batch with the forward of the other (see dllm_decode_micro_batch)')
+    ap.add_argument('--force-first', action='store_true',
+                    help='also decode the leftmost processed mask of each block every step (see dllm_force_first)')
+    ap.add_argument('--stable-unmask', action='store_true',
+                    help='also decode masks whose prediction equals the previous one (see dllm_stable_unmask)')
+    ap.add_argument('--stable-min-conf', type=float, default=0.0,
+                    help='with --stable-unmask: the agreeing prediction also needs this confidence')
+    ap.add_argument('--stable-ctx', type=int, default=0,
+                    help='with --stable-unmask: a position within this distance must be decoded between the two '
+                    'predictions (0 = off)')
+    ap.add_argument('--force-first-min-conf', type=float, default=0.0,
+                    help='with --force-first: only force the leftmost mask when its confidence reaches this floor')
+    ap.add_argument('--entropy-bound', type=float, default=0.0,
+                    help='> 0: entropy-bounded unmasking instead of the confidence threshold (see dllm_entropy_bound)')
+    ap.add_argument('--unmask-budget', type=float, default=0.0,
+                    help='> 0: decode the most confident masks while sum(1 - conf) fits this budget, instead of the '
+                    'confidence threshold (see dllm_unmask_budget)')
+    ap.add_argument('--gpu-multistep', type=int, default=0,
+                    help='> 0: delayed-cache decode steps per host round trip, next inputs built on the GPU')
     ap.add_argument('--eager', action='store_true')
     ap.add_argument('--legacy-sampling', action='store_true',
                     help='top-k 50 / temperature 0.8 sampling, as in the runs before greedy decoding was fixed')
@@ -93,7 +118,19 @@ def build_engine(args):
         dllm_masked_logits=args.masked_logits,
         dllm_fast_host=args.fast_host,
         dllm_eos_early_stop=args.eos_early_stop,
-        max_prefill_token_num=args.concurrency * BLOCK,
+        dllm_prefill_min_waiting=args.prefill_min_waiting,
+        dllm_prefill_max_wait_s=args.prefill_max_wait_s,
+        dllm_decode_micro_batch=args.decode_micro_batch,
+        dllm_force_first=args.force_first,
+        dllm_stable_unmask=args.stable_unmask,
+        dllm_stable_min_conf=args.stable_min_conf,
+        dllm_stable_ctx=args.stable_ctx,
+        dllm_force_first_min_conf=args.force_first_min_conf,
+        dllm_entropy_bound=args.entropy_bound,
+        dllm_unmask_budget=args.unmask_budget,
+        dllm_gpu_multistep=args.gpu_multistep,
+        # 4096 at the default concurrency 128; small batches keep it so prompts are not split into 32-token chunks
+        max_prefill_token_num=max(args.concurrency * BLOCK, 4096),
     )
     return Engine.from_pretrained(args.model, engine_config=engine_config)
 

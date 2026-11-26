@@ -1,0 +1,25 @@
+{
+ "tag": "thr0.9_bs8_n64",
+ "mode": "thr0.9",
+ "mode_cfg": {
+  "rule": "thr",
+  "threshold": 0.9,
+  "stable_min_conf": -1.0,
+  "force_first": false,
+  "window_k": 0,
+  "focus": false,
+  "focus_alpha": 1.5,
+  "focus_min_keep": 16,
+  "evict_layer": 2
+ },
+ "batch_size": 8,
+ "n": 64,
+ "accuracy": 0.953125,
+ "wall_s": 122.89079910097644,
+ "out_tokens": 19643,
+ "out_tok_per_s": 159.84109586479144,
+ "decoder_steps": 284,
+ "decoder_tokens_l01": 581632,
+ "decoder_tokens_deep": 581632,
+ "max_mem_gb": 65.80862331390381
+}

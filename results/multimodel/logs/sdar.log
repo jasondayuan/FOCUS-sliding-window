@@ -1,0 +1,74 @@
+entropy_bound: OK (matches the reference loop for 5 bounds)
+force_first_min_conf: OK
+unmasking: OK
+record_predictions: OK
+stable_min_conf: OK
+stable_ctx: OK
+05:37:11 START smoke_eb
+05:37:58 END smoke_eb rc=0
+05:37:58 START fw_bs128
+05:40:51 END fw_bs128 rc=0
+05:40:51 START fw_st05_bs128
+05:43:02 END fw_st05_bs128 rc=0
+05:43:02 START fw_ff_bs128
+05:45:13 END fw_ff_bs128 rc=0
+05:45:13 START fw_ff05_bs128
+05:47:26 END fw_ff05_bs128 rc=0
+05:47:26 START fw_eb01_bs128
+05:49:54 END fw_eb01_bs128 rc=0
+05:49:54 START fw_eb05_bs128
+05:52:05 END fw_eb05_bs128 rc=0
+05:52:05 START focus_bs128
+05:54:31 END focus_bs128 rc=0
+05:54:31 START vanilla_bs128
+05:58:47 END vanilla_bs128 rc=0
+05:58:47 START fw_bs32
+06:00:16 END fw_bs32 rc=0
+06:00:16 START fw_st05_bs32
+06:01:39 END fw_st05_bs32 rc=0
+06:01:39 START fw_ff_bs32
+06:03:08 END fw_ff_bs32 rc=0
+06:03:08 START fw_ff05_bs32
+06:04:32 END fw_ff05_bs32 rc=0
+06:04:32 START fw_eb01_bs32
+06:06:09 END fw_eb01_bs32 rc=0
+06:06:09 START fw_eb05_bs32
+06:07:29 END fw_eb05_bs32 rc=0
+06:07:29 START focus_bs32
+06:09:17 END focus_bs32 rc=0
+06:09:17 START vanilla_bs32
+06:11:14 END vanilla_bs32 rc=0
+06:11:14 START fw_bs8
+06:12:49 END fw_bs8 rc=0
+06:12:49 START fw_st05_bs8
+06:14:22 END fw_st05_bs8 rc=0
+06:14:22 START fw_ff_bs8
+06:15:53 END fw_ff_bs8 rc=0
+06:15:53 START fw_ff05_bs8
+06:17:23 END fw_ff05_bs8 rc=0
+06:17:23 START fw_eb01_bs8
+06:18:59 END fw_eb01_bs8 rc=0
+06:18:59 START fw_eb05_bs8
+06:20:21 END fw_eb05_bs8 rc=0
+06:20:21 START focus_bs8
+06:22:12 END focus_bs8 rc=0
+06:22:12 START vanilla_bs8
+06:23:49 END vanilla_bs8 rc=0
+06:23:49 START fw_bs1
+06:26:16 END fw_bs1 rc=0
+06:26:16 START fw_st05_bs1
+06:28:18 END fw_st05_bs1 rc=0
+06:28:18 START fw_ff_bs1
+06:30:37 END fw_ff_bs1 rc=0
+06:30:37 START fw_ff05_bs1
+06:32:44 END fw_ff05_bs1 rc=0
+06:32:44 START fw_eb01_bs1
+06:34:58 END fw_eb01_bs1 rc=0
+06:34:58 START fw_eb05_bs1
+06:36:45 END fw_eb05_bs1 rc=0
+06:36:45 START focus_bs1
+06:39:16 END focus_bs1 rc=0
+06:39:16 START vanilla_bs1
+06:41:07 END vanilla_bs1 rc=0
+06:41:07 ALL_DONE
+07:12:04 CHAIN_DONE

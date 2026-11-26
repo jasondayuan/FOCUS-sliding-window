@@ -76,6 +76,10 @@ class BatchedOutputs:
     new_token_timestamp: int = 0
     extra_outputs: Optional[ExtraOutputs] = None
     all_routed_experts: Optional[torch.Tensor] = None
+    # dLLM stats handed over after the output event instead of synced in the forward (dllm_decode_micro_batch):
+    # [2, batch] = (tokens past FOCUS eviction, tokens fed to layer 0) and [batch] FOCUS block progress
+    dllm_track_counts: Optional[torch.Tensor] = None
+    dllm_focus_progress: Optional[torch.Tensor] = None
 
     def to_cpu(self):
         """To cpu."""
@@ -253,9 +257,21 @@ def model_forward(
             # q_seqlens before FOCUS eviction, i.e. tokens fed to the first layers
             input_q_seqlens = context.q_seqlens
             output = model(**input_dict)
-            focus_processed = context.get_focus_processed_positions()
+            # micro-batched decoding: do not block the host until this forward is done (that is when the other
+            # micro-batch's outputs get processed); copy the stats on the stream and read them with the outputs
+            defer = context.dllm_defer_host and context.is_decoding and STEP_PROFILE is None
+            focus_processed = None if defer else context.get_focus_processed_positions()
             if not isinstance(output, Dict):
                 output = dict(hidden_states=output)
+            if defer:
+                num_seqs = len(inputs.seq_length)
+                if context.focus_enabled():
+                    progress = context.focus_view.block_progress[:num_seqs]
+                    output['dllm_focus_progress'] = progress.to(dtype=torch.long, copy=True)
+                if context.dllm_track:
+                    # stack allocates a new tensor, so later steps cannot overwrite it before it is read
+                    output['dllm_track_counts'] = torch.stack(
+                        [context.q_seqlens[:num_seqs].long(), input_q_seqlens[:num_seqs].long()])
             # InternVL-3.5-Flash will change the seqlen, model_metas during forward
             if context.model_metas is not None and context.model_metas[0] is not None:
                 model_metas = context.model_metas
@@ -268,7 +284,7 @@ def model_forward(
                     entry['focus_processed_rightmost'] = processed
                     new_metas.append(entry)
                 model_metas = new_metas
-            if context.is_decoding and context.dllm_track:
+            if context.is_decoding and context.dllm_track and not defer:
                 seq_lens = context.q_seqlens[:len(inputs.seq_length)]
                 proc_counts = seq_lens.detach().to('cpu', dtype=torch.long).tolist()
                 input_counts = input_q_seqlens[:len(inputs.seq_length)].detach().to('cpu', dtype=torch.long).tolist()
@@ -785,6 +801,8 @@ class BaseModelAgent:
                 next_token_ids=next_token_ids,
                 model_metas=model_metas,
                 extra_inputs=extra_inputs,
+                model_config=self.model_config,
+                cache_block_size=self.cache_config.block_size,
             )
 
         # dist tools
@@ -878,7 +896,9 @@ class BaseModelAgent:
                                        model_metas=model_metas,
                                        logprobs=logprobs,
                                        all_routed_experts=all_routed_experts,
-                                       extra_outputs=extra_outputs))
+                                       extra_outputs=extra_outputs,
+                                       dllm_track_counts=output.get('dllm_track_counts'),
+                                       dllm_focus_progress=output.get('dllm_focus_progress')))
             else:
                 # Avoid adding the ADInplaceOrView dispatch key to `next_token_ids`,
                 # as it can trigger recompilation on different ranks when using torch.compile.
